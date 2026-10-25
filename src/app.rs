@@ -76,6 +76,12 @@ const TOOL_BUTTON: Vec2 = vec2(36.0, 32.0);
 const MIN_ZOOM: f32 = 0.05;
 const MAX_ZOOM: f32 = 32.0;
 const CHECKER_SIZE: f32 = 8.0;
+/// Accent for selected tabs, tools and toggles: the blue of the icon's rainbow, dark
+/// enough for white text (contrast about 5.3:1) in both the light and the dark theme.
+const ACCENT: Color32 = Color32::from_rgb(0x2F, 0x6D, 0xB5);
+/// A brighter blue for marks drawn over the image, like the text cursor, which must
+/// show on dark and light pictures alike.
+const CANVAS_ACCENT: Color32 = Color32::from_rgb(0x3D, 0x8B, 0xD9);
 /// Minimum distance between the points of a brush stroke, in screen pixels.
 const BRUSH_POINT_SPACING: f32 = 2.0;
 
@@ -1014,13 +1020,23 @@ impl XPaintApp {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             for (i, doc) in self.documents.iter().enumerate() {
+                // The current tab has a button background, bold text and an accent
+                // underline; the others are dimmed and only show a background on hover.
                 let selected = i == self.active;
                 let text = if selected {
-                    RichText::new(&doc.name).strong()
-                } else {
                     RichText::new(&doc.name)
+                        .strong()
+                        .color(ui.visuals().strong_text_color())
+                } else {
+                    RichText::new(&doc.name).color(ui.visuals().weak_text_color())
                 };
-                let tab = ui.selectable_label(selected, text);
+                let tab = ui.add(egui::Button::new(text).frame_when_inactive(selected));
+                if selected {
+                    let underline = tab.rect.shrink2(vec2(6.0, 0.0));
+                    let y = underline.bottom() - 1.0;
+                    ui.painter()
+                        .hline(underline.x_range(), y, Stroke::new(2.0, ACCENT));
+                }
                 if tab.clicked() && !selected {
                     switch_to = Some(i);
                 }
@@ -1180,7 +1196,6 @@ impl XPaintApp {
         let image_size = Vec2::new(doc.width() as f32, doc.height() as f32) * doc.zoom;
         let texture_id = doc.texture(ui.ctx()).id();
         let shadow = ui.visuals().window_shadow;
-        let accent = ui.visuals().selection.stroke.color;
         let drag_anchor = &mut self.drag_anchor;
         let tool = self.tool;
         let pending = &mut self.pending_text;
@@ -1415,7 +1430,7 @@ impl XPaintApp {
                     paint_selection(painter, rect, Rect::from_min_size(min, size));
                 }
                 if let Some(overlay) = &overlay {
-                    paint_text_overlay(ui, rect, doc.zoom, overlay, accent);
+                    paint_text_overlay(ui, rect, doc.zoom, overlay, CANVAS_ACCENT);
                 }
                 if let Some(pending) = pending_shape.as_ref() {
                     let primitives = pending.primitives(shape_style.width);
@@ -1545,9 +1560,9 @@ fn setup_style(ctx: &egui::Context) {
         visuals.widgets.active.corner_radius = radius;
         visuals.widgets.open.corner_radius = radius;
         visuals.window_corner_radius = CornerRadius::same(10);
-        // Warm accent, shared with LeoView, that sits in the middle of the icon's rainbow.
-        visuals.selection.stroke.color = Color32::from_rgb(0xE0, 0xA8, 0x45);
-        visuals.selection.bg_fill = Color32::from_rgb(0xB0, 0x7A, 0x2C);
+        // Selected widgets and selected text: white on the accent.
+        visuals.selection.bg_fill = ACCENT;
+        visuals.selection.stroke.color = Color32::WHITE;
     });
 }
 
