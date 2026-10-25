@@ -13,7 +13,7 @@ crop it, add arrows, boxes and text, and save it again.
 - **Drawing tools:** brush, arrow, rectangle, ellipse and text, with adjustable color, line width, font size and bold
 - **Shapes and text stay editable** until you move on. Move them with the mouse or arrow keys, change their color or size, or delete them.
 - **Undo / redo** for every edit
-- **Zoom** with Ctrl + mouse wheel, the zoom slider, or fit to window
+- **Zoom** with Ctrl + mouse wheel, the zoom slider, fit to window, or back to 100%
 - **Opens** PNG, JPEG, BMP, GIF, TGA, TIFF, WebP, ICO and QOI
 - **Saves** PNG, JPEG, WebP, BMP, GIF, TIFF, TGA and QOI. Transparent areas turn white when saving as JPEG.
 - **Adjustable icon size** (Normal, Large, Larger) in the Settings menu, remembered between runs
@@ -21,10 +21,9 @@ crop it, add arrows, boxes and text, and save it again.
 
 ## Installation
 
-### Download
-
 Download the latest `xpaint-…-x86_64-linux.tar.gz` from the
-[releases page](https://github.com/matz0r/xpaint/releases), then:
+[releases page](https://github.com/matz0r/xpaint/releases), unpack it, and run
+`install.sh` inside:
 
 ```sh
 tar -xzf xpaint-*-x86_64-linux.tar.gz
@@ -32,28 +31,12 @@ cd xpaint-*-x86_64-linux
 ./install.sh
 ```
 
-The prebuilt binary runs on 64-bit Linux distributions from about 2024 on (glibc 2.39 or newer).
+xpaint is installed for your user only, no root needed. It then shows up in your
+application menu and in "Open with…" for image files.
 
-### From source
+It runs on 64-bit Linux distributions from about 2024 on.
 
-You need a Rust toolchain ([rustup.rs](https://rustup.rs)).
-
-```sh
-git clone https://github.com/matz0r/xpaint.git
-cd xpaint
-./install.sh
-```
-
-Either way, xpaint is installed for your user only (no root needed):
-
-- the program at `~/.local/bin/xpaint`
-- an application-menu entry and icon, so xpaint shows up in your launcher and in "Open with…" for image files
-
-To remove it again:
-
-```sh
-./install.sh uninstall
-```
+To remove it again, run `./install.sh uninstall` from the same folder.
 
 ## Usage
 
@@ -100,8 +83,14 @@ Most shortcuts are the same as in paint.net.
 | Crop to selection          | Ctrl+Shift+X             |
 | Deselect                   | Ctrl+D or Esc            |
 | Zoom to fit window         | Ctrl+B                   |
+| Zoom to 100%               | Ctrl+0                   |
 | Zoom in / out              | Ctrl + mouse wheel       |
 | Close tab                  | Middle-click the tab     |
+
+## Development
+
+Building from source, running the tests and making releases is described in
+[DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## License
 
