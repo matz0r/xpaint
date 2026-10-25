@@ -23,7 +23,7 @@ crop it, add arrows, boxes and text, and save it again.
 xpaint is installed from source. You need a Rust toolchain ([rustup.rs](https://rustup.rs)).
 
 ```sh
-git clone <repository-url> xpaint
+git clone https://github.com/matz0r/xpaint.git
 cd xpaint
 ./install.sh
 ```
