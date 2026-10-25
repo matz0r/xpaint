@@ -27,6 +27,7 @@ const REDO_ICON: ImageSource = egui::include_image!("../assets/icons/redo.svg");
 const CROP_ICON: ImageSource = egui::include_image!("../assets/icons/crop.svg");
 const ABOUT_ICON: ImageSource = egui::include_image!("../assets/icons/about.svg");
 const FIT_ICON: ImageSource = egui::include_image!("../assets/icons/fit.svg");
+const ACTUAL_SIZE_ICON: ImageSource = egui::include_image!("../assets/icons/actual-size.svg");
 const ZOOM_ICON: ImageSource = egui::include_image!("../assets/icons/zoom.svg");
 const CLOSE_ICON: ImageSource = egui::include_image!("../assets/icons/close.svg");
 const THEME_SYSTEM_ICON: ImageSource = egui::include_image!("../assets/icons/theme-system.svg");
@@ -45,6 +46,8 @@ const PASTE_NEW_SHORTCUT: KeyboardShortcut =
 // Same shortcut paint.net uses for "Zoom to Window".
 const COPY_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::C);
 const FIT_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::B);
+// Same shortcut paint.net uses for "Actual Size".
+const ACTUAL_SIZE_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Num0);
 // Same shortcuts paint.net uses for "Crop to Selection" and "Deselect All".
 const CROP_SHORTCUT: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::X);
@@ -586,6 +589,11 @@ impl XPaintApp {
         }
         if ctx.input_mut(|i| i.consume_shortcut(&FIT_SHORTCUT)) {
             self.fit_requested = true;
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&ACTUAL_SIZE_SHORTCUT))
+            && let Some(doc) = self.documents.get_mut(self.active)
+        {
+            doc.zoom = 1.0;
         }
         if ctx.input_mut(|i| i.consume_shortcut(&CROP_SHORTCUT)) {
             self.crop();
@@ -1168,6 +1176,13 @@ impl XPaintApp {
                 return;
             };
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let actual_tip = format!(
+                    "Zoom to 100% ({})",
+                    ui.ctx().format_shortcut(&ACTUAL_SIZE_SHORTCUT)
+                );
+                if icon_button(ui, ACTUAL_SIZE_ICON, true, &actual_tip).clicked() {
+                    doc.zoom = 1.0;
+                }
                 let fit_tip = format!(
                     "Zoom to fit the window ({})",
                     ui.ctx().format_shortcut(&FIT_SHORTCUT)
@@ -1271,10 +1286,14 @@ impl XPaintApp {
             doc.zoom = (doc.zoom * zoom_delta).clamp(MIN_ZOOM, MAX_ZOOM);
         }
 
-        if std::mem::take(&mut self.fit_requested) {
+        let fit_requested = std::mem::take(&mut self.fit_requested);
+        let fit_when_shown = std::mem::take(&mut doc.fit_when_shown);
+        if fit_requested || fit_when_shown {
             // Leave a pixel of slack so rounding never triggers the scrollbars.
             let viewport = ui.available_size() - Vec2::splat(1.0);
             let fit = (viewport.x / doc.width() as f32).min(viewport.y / doc.height() as f32);
+            // A newly shown image is only shrunk, never enlarged past 100%.
+            let fit = if fit_requested { fit } else { fit.min(1.0) };
             doc.zoom = fit.clamp(MIN_ZOOM, MAX_ZOOM);
         }
 
@@ -2506,9 +2525,24 @@ mod tests {
     }
 
     #[test]
+    fn new_images_shrink_to_fit_but_never_enlarge() {
+        let (mut app, ctx) = drawing_app(Tool::Brush);
+        assert_eq!(app.documents[0].zoom, 1.0, "300×100 fits as is");
+        app.add_document(Document::new("big", RgbaImage::new(2000, 1500)));
+        canvas_frame(&mut app, &ctx, vec![]);
+        let zoom = app.documents[1].zoom;
+        assert!(zoom < 1.0 && 2000.0 * zoom < 800.0, "zoom {zoom}");
+        // Zooming afterwards is not undone by the next frame.
+        app.documents[1].zoom = 1.0;
+        canvas_frame(&mut app, &ctx, vec![]);
+        assert_eq!(app.documents[1].zoom, 1.0);
+    }
+
+    #[test]
     fn brush_keeps_points_a_few_screen_pixels_apart_at_any_zoom() {
         let (mut app, ctx) = drawing_app(Tool::Brush);
         app.documents[0].zoom = 5.0;
+        app.documents[0].fit_when_shown = false;
         canvas_frame(&mut app, &ctx, vec![]); // lay out at the new zoom
         // At 500 % the 300×100 image is 1500×500 screen px, scrolled to its top left.
         let start = pos2(10.0, 300.0);

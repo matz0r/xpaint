@@ -33,6 +33,9 @@ pub struct Document {
     pub path: Option<PathBuf>,
     pub image: RgbaImage,
     pub zoom: f32,
+    /// Shrink the zoom to fit the canvas the first time the document is shown,
+    /// if the image is larger than the canvas.
+    pub fit_when_shown: bool,
     pub selection: Option<PixelRect>,
     undo_stack: Vec<Snapshot>,
     redo_stack: Vec<Snapshot>,
@@ -46,6 +49,7 @@ impl Document {
             path: None,
             image,
             zoom: 1.0,
+            fit_when_shown: true,
             selection: None,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
