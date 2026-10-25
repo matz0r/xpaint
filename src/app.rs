@@ -802,6 +802,27 @@ impl XPaintApp {
     fn toolbar(&mut self, ui: &mut Ui) {
         let rect = ui.max_rect();
 
+        // The toolbar doubles as the window's title bar: dragging its empty space moves
+        // the window and a double click maximizes it, as in GNOME apps and browsers.
+        // In a dark theme the real title bar can be hard to tell apart from it. The
+        // buttons are added later and therefore sit on top and still get their clicks;
+        // drags are handled at the end, once it is known whether one started on them.
+        let background = ui.interact(
+            rect,
+            ui.scope_id().with("title_bar"),
+            Sense::click_and_drag(),
+        );
+        if background.double_clicked() {
+            let maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized));
+        }
+        // A faint line along the top edge separates the toolbar from the title bar.
+        let top = ui.ctx().content_rect().top() + 0.5;
+        let line = ui.visuals().widgets.noninteractive.bg_stroke;
+        ui.painter()
+            .hline(ui.ctx().content_rect().x_range(), top, line);
+
         // Left: branding and the file actions.
         ui.scope_builder(
             UiBuilder::new()
@@ -887,6 +908,28 @@ impl XPaintApp {
                 theme_buttons(ui);
             },
         );
+
+        // egui gives a drag to the topmost widget that senses drags, which is the
+        // background even when the press was on a button (buttons only sense clicks).
+        if background.drag_started_by(egui::PointerButton::Primary) {
+            let origin = ui.input(|i| i.pointer.press_origin());
+            let on_widget = origin.is_some_and(|origin| {
+                ui.ctx().viewport(|v| {
+                    v.this_pass
+                        .widgets
+                        .layers()
+                        .flat_map(|(_, widgets)| widgets.iter())
+                        .any(|w| {
+                            w.id != background.id
+                                && w.sense.senses_click()
+                                && w.rect.contains(origin)
+                        })
+                })
+            });
+            if !on_widget {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+            }
+        }
     }
 
     /// Undo and Redo, named after the edit they would revert or reapply.
@@ -1010,7 +1053,8 @@ impl XPaintApp {
                     }
                 }
             };
-            ui.label(RichText::new(hint).weak());
+            // The normal text color: the faint "weak" one is hard to read.
+            ui.label(RichText::new(hint).color(ui.visuals().text_color()));
         });
     }
 
@@ -1021,14 +1065,15 @@ impl XPaintApp {
             ui.spacing_mut().item_spacing.x = 2.0;
             for (i, doc) in self.documents.iter().enumerate() {
                 // The current tab has a button background, bold text and an accent
-                // underline; the others are dimmed and only show a background on hover.
+                // underline; the others only show a background on hover.
                 let selected = i == self.active;
                 let text = if selected {
                     RichText::new(&doc.name)
                         .strong()
                         .color(ui.visuals().strong_text_color())
                 } else {
-                    RichText::new(&doc.name).color(ui.visuals().weak_text_color())
+                    // egui's button text color, which brightens on hover.
+                    RichText::new(&doc.name)
                 };
                 let tab = ui.add(egui::Button::new(text).frame_when_inactive(selected));
                 if selected {
@@ -1139,19 +1184,27 @@ impl XPaintApp {
                 ui.label(
                     RichText::new("Open an image or create one from the clipboard")
                         .size(15.0)
-                        .weak(),
+                        .color(ui.visuals().text_color()),
                 );
                 ui.add_space(10.0);
-                // Center the button row by measuring it first.
-                let row_width = 2.0 * 150.0 + ui.spacing().item_spacing.x;
-                ui.allocate_ui_with_layout(
-                    vec2(row_width, ui.spacing().interact_size.y),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.spacing_mut().interact_size.x = 150.0;
-                        self.file_buttons(ui);
-                    },
-                );
+                // A row is only centered if it is given its exact width, which is
+                // known after laying it out: remember it and correct on the next frame.
+                let width_id = ui.scope_id().with("file_buttons_width");
+                let width = ui.data(|d| d.get_temp::<f32>(width_id)).unwrap_or(280.0);
+                let measured = ui
+                    .allocate_ui_with_layout(
+                        vec2(width, ui.spacing().interact_size.y),
+                        Layout::left_to_right(Align::Center),
+                        |ui| {
+                            self.file_buttons(ui);
+                            ui.min_rect().width()
+                        },
+                    )
+                    .inner;
+                if (measured - width).abs() > 0.5 {
+                    ui.data_mut(|d| d.insert_temp(width_id, measured));
+                    ui.ctx().request_repaint();
+                }
             },
         );
     }
@@ -2230,7 +2283,7 @@ mod tests {
         app.add_document(Document::new("hd", RgbaImage::new(1920, 1080)));
         app.tool = Tool::Brush;
         let size = vec2(1920.0, 1080.0);
-        let mut run = |app: &mut XPaintApp, events: Vec<Event>| {
+        let run = |app: &mut XPaintApp, events: Vec<Event>| {
             let input = egui::RawInput {
                 screen_rect: Some(Rect::from_min_size(Pos2::ZERO, size)),
                 events,
@@ -2476,5 +2529,115 @@ mod tests {
             "Ctrl+S is not the S tool shortcut"
         );
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The viewport commands the app sent during one frame of `ui`.
+    fn commands(output: &egui::FullOutput) -> Vec<egui::ViewportCommand> {
+        output
+            .viewport_output
+            .get(&egui::ViewportId::ROOT)
+            .map(|v| v.commands.clone())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn toolbar_drags_and_maximizes_the_window() {
+        let ctx = egui::Context::default();
+        let mut app = XPaintApp::with_context(&ctx, Vec::new());
+        let toolbar = Rect::from_min_size(Pos2::ZERO, vec2(1000.0, TOOLBAR_HEIGHT));
+        let mut run = |events: Vec<Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 600.0))),
+                events,
+                ..Default::default()
+            };
+            let mut output = ctx.run_ui(input, |ui| {
+                egui::Panel::top("toolbar")
+                    .exact_size(TOOLBAR_HEIGHT)
+                    .show(ui, |ui| app.toolbar(ui));
+            });
+            output.textures_delta.clear();
+            commands(&output)
+        };
+        let empty = pos2(700.0, toolbar.center().y);
+
+        run(vec![Event::PointerMoved(empty)]);
+        run(vec![button(empty, true, Modifiers::NONE)]);
+        let mut sent = Vec::new();
+        for dx in [4.0, 8.0, 12.0] {
+            sent.extend(run(vec![Event::PointerMoved(empty + vec2(dx, 0.0))]));
+        }
+        run(vec![button(
+            empty + vec2(12.0, 0.0),
+            false,
+            Modifiers::NONE,
+        )]);
+        assert!(sent.contains(&egui::ViewportCommand::StartDrag), "{sent:?}");
+
+        // Double click on the empty space.
+        let mut sent = Vec::new();
+        for pressed in [true, false, true, false] {
+            sent.extend(run(vec![button(empty, pressed, Modifiers::NONE)]));
+        }
+        assert!(
+            sent.contains(&egui::ViewportCommand::Maximized(true)),
+            "{sent:?}"
+        );
+
+        // Dragging from a button does not move the window. Take the leftmost button:
+        // a clickable widget narrower than the whole toolbar.
+        let on_button = ctx.viewport(|v| {
+            v.this_pass
+                .widgets
+                .layers()
+                .flat_map(|(_, widgets)| widgets.iter())
+                .filter(|w| w.sense.senses_click() && w.rect.width() < 100.0)
+                .min_by(|a, b| a.rect.left().total_cmp(&b.rect.left()))
+                .map(|w| w.rect.center())
+                .expect("the toolbar has buttons")
+        });
+        run(vec![Event::PointerMoved(on_button)]);
+        run(vec![button(on_button, true, Modifiers::NONE)]);
+        let mut sent = Vec::new();
+        for dx in [4.0, 8.0, 12.0] {
+            sent.extend(run(vec![Event::PointerMoved(on_button + vec2(dx, 0.0))]));
+        }
+        run(vec![button(
+            on_button + vec2(12.0, 0.0),
+            false,
+            Modifiers::NONE,
+        )]);
+        assert!(
+            !sent.contains(&egui::ViewportCommand::StartDrag),
+            "{sent:?}"
+        );
+    }
+
+    #[test]
+    fn empty_state_buttons_are_centered() {
+        let ctx = egui::Context::default();
+        let mut app = XPaintApp::with_context(&ctx, Vec::new());
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 600.0));
+        let mut buttons = Rect::NOTHING;
+        // The first frame measures the row, the second lays it out centered.
+        for _ in 0..3 {
+            let input = egui::RawInput {
+                screen_rect: Some(screen),
+                ..Default::default()
+            };
+            let mut output = ctx.run_ui(input, |ui| app.empty_state(ui));
+            output.textures_delta.clear();
+            buttons = ctx.viewport(|v| {
+                v.this_pass
+                    .widgets
+                    .layers()
+                    .flat_map(|(_, widgets)| widgets.iter())
+                    .filter(|w| w.sense.senses_click())
+                    .fold(Rect::NOTHING, |r, w| r.union(w.rect))
+            });
+        }
+        assert!(buttons.width() > 150.0, "both buttons found: {buttons:?}");
+        let off_center = buttons.center().x - screen.center().x;
+        assert!(off_center.abs() < 1.0, "buttons {off_center} px off center");
     }
 }
