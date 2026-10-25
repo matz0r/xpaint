@@ -5,21 +5,6 @@ crop it, add arrows, boxes and text, and save it again.
 
 ![xpaint with an annotated screenshot open](assets/screenshot.png)
 
-## Features
-
-- **Tabs** for working on several images at once
-- **Paste from clipboard** straight into a new image, which suits screenshots
-- **Select and crop**
-- **Drawing tools:** brush, arrow, rectangle, ellipse and text, with adjustable color, line width, font size and bold
-- **Shapes and text stay editable** until you move on. Move them with the mouse or arrow keys, change their color or size, or delete them.
-- **Undo / redo** for every edit
-- **Zoom** with Ctrl + mouse wheel, the zoom slider, fit to window, or back to 100%
-- **Opens** PNG, JPEG, BMP, GIF, TGA, TIFF, WebP, ICO and QOI
-- **Saves** PNG, JPEG, WebP, BMP, GIF, TIFF, TGA and QOI. Transparent areas turn white when saving as JPEG.
-- **Adjustable icon size** (Normal, Large, Larger) in the Settings menu, remembered between runs
-- **Installs itself** into your application menu from the Settings menu
-- Works on Wayland and X11
-
 ## Installation
 
 xpaint is a single program file with nothing else to install.
@@ -44,6 +29,21 @@ downloaded folder.
 
 To update, start the newly downloaded xpaint and choose **Settings → Update
 installation**. To remove xpaint again, choose **Settings → Uninstall**.
+
+## Features
+
+- **Tabs** for working on several images at once
+- **Paste from clipboard** straight into a new image, which suits screenshots
+- **Select and crop**
+- **Drawing tools:** brush, arrow, rectangle, ellipse and text, with adjustable color, line width, font size and bold
+- **Shapes and text stay editable** until you move on. Move them with the mouse or arrow keys, change their color or size, or delete them.
+- **Undo / redo** for every edit
+- **Zoom** with Ctrl + mouse wheel, the zoom slider, fit to window, or back to 100%
+- **Opens** PNG, JPEG, BMP, GIF, TGA, TIFF, WebP, ICO and QOI
+- **Saves** PNG, JPEG, WebP, BMP, GIF, TIFF, TGA and QOI. Transparent areas turn white when saving as JPEG.
+- **Adjustable icon size** (Normal, Large, Larger) in the Settings menu, remembered between runs
+- **Installs itself** into your application menu from the Settings menu
+- Works on Wayland and X11
 
 ## Usage
 
