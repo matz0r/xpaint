@@ -16,6 +16,7 @@ crop it, add arrows, boxes and text, and save it again.
 - **Zoom** with Ctrl + mouse wheel, the zoom slider, or fit to window
 - **Opens** PNG, JPEG, BMP, GIF, TGA, TIFF, WebP, ICO and QOI
 - **Saves** PNG, JPEG, WebP, BMP, GIF, TIFF, TGA and QOI. Transparent areas turn white when saving as JPEG.
+- **Adjustable icon size** (Normal, Large, Larger) in the Settings menu, remembered between runs
 - Works on Wayland and X11
 
 ## Installation

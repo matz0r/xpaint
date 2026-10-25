@@ -1720,7 +1720,9 @@ fn menu_icon(icon: ImageSource, color: Color32) -> egui::Image {
 fn theme_buttons(ui: &mut Ui) {
     use egui::ThemePreference;
     let mut preference = ui.options(|o| o.theme_preference);
-    ui.horizontal(|ui| {
+    // A scope keeps the toolbar's centered row, so the buttons line up with the others
+    // at every icon size (a nested `horizontal` row is only as tall as text).
+    ui.scope(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         // Right to left, so the order on screen is System, Dark, Light.
         for (choice, icon, tip) in [
@@ -2614,5 +2616,26 @@ mod tests {
         assert!(buttons.width() > 150.0, "both buttons found: {buttons:?}");
         let off_center = buttons.center().x - screen.center().x;
         assert!(off_center.abs() < 1.0, "buttons {off_center} px off center");
+    }
+
+    #[test]
+    fn icon_size_scales_buttons_and_is_stored_by_name() {
+        for size in IconSize::ALL {
+            assert_eq!(IconSize::from_name(size.name()), Some(size));
+        }
+        assert_eq!(IconSize::from_name("Huge"), None);
+
+        let ctx = egui::Context::default();
+        let width_at = |size: IconSize| {
+            set_icon_scale(&ctx, size.scale());
+            let mut width = 0.0;
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                width = icon_button(ui, OPEN_ICON, true, "Open").rect.width();
+            });
+            output.textures_delta.clear();
+            width
+        };
+        assert_eq!(width_at(IconSize::Normal), ICON_BUTTON.x);
+        assert_eq!(width_at(IconSize::Larger), ICON_BUTTON.x * 1.5);
     }
 }

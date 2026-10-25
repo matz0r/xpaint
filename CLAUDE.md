@@ -27,7 +27,7 @@ xpaint is a small paint.net-style image editor for Linux written in Rust with eg
 
 Key interaction model: finished shapes (`PendingShape`) and text (`PendingText`) **float** above the image rather than being written immediately — they can still be moved (drag / arrow-key nudge), restyled, or deleted. They are composited into the document (`Document::draw_overlay`, one undoable step) when committed, e.g. on switching tools, Enter, or starting something new.
 
-UI icons are SVGs in `assets/icons/` (24×24 viewBox, white 2px round strokes, no fill), embedded with `egui::include_image!` and rendered by `egui_extras`' SVG loader. Being white, they are tinted to the widget's state color when painted (`icon_button`, `paint_icon`, `menu_icon` in `app.rs`). New icons should follow the same style.
+UI icons are SVGs in `assets/icons/` (24×24 viewBox, white 2px round strokes, no fill), embedded with `egui::include_image!` and rendered by `egui_extras`' SVG loader. Being white, they are tinted to the widget's state color when painted (`icon_button`, `paint_icon`, `menu_icon` in `app.rs`). New icons should follow the same style. Icon and button sizes are multiplied by `icon_scale(ui)` (the Settings menu's icon size, saved via eframe `persistence` under the `icon_size` key); size new icon buttons through these helpers so they follow the setting.
 
 Coordinates: document state is in image pixels; the canvas converts via `image_rect.min + pos * zoom`.
 
