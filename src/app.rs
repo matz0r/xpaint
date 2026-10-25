@@ -32,6 +32,7 @@ const CLOSE_ICON: ImageSource = egui::include_image!("../assets/icons/close.svg"
 const THEME_SYSTEM_ICON: ImageSource = egui::include_image!("../assets/icons/theme-system.svg");
 const THEME_DARK_ICON: ImageSource = egui::include_image!("../assets/icons/theme-dark.svg");
 const THEME_LIGHT_ICON: ImageSource = egui::include_image!("../assets/icons/theme-light.svg");
+const SETTINGS_ICON: ImageSource = egui::include_image!("../assets/icons/settings.svg");
 
 const OPEN_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
 const SAVE_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
@@ -70,9 +71,46 @@ const SAVE_FORMATS: &[(&str, &[&str])] = &[
     ("QOI", &["qoi"]),
 ];
 
+// Sizes at the Normal icon size; the icon size setting scales them (see `icon_scale`).
 const TOOLBAR_HEIGHT: f32 = 42.0;
 const ICON_BUTTON: Vec2 = vec2(32.0, 28.0);
 const TOOL_BUTTON: Vec2 = vec2(36.0, 32.0);
+
+/// Storage key of the icon size setting.
+const ICON_SIZE_KEY: &str = "icon_size";
+
+/// How large the toolbar and tool icons are drawn, together with their buttons.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum IconSize {
+    #[default]
+    Normal,
+    Large,
+    Larger,
+}
+
+impl IconSize {
+    const ALL: [IconSize; 3] = [IconSize::Normal, IconSize::Large, IconSize::Larger];
+
+    fn name(self) -> &'static str {
+        match self {
+            IconSize::Normal => "Normal",
+            IconSize::Large => "Large",
+            IconSize::Larger => "Larger",
+        }
+    }
+
+    fn scale(self) -> f32 {
+        match self {
+            IconSize::Normal => 1.0,
+            IconSize::Large => 1.25,
+            IconSize::Larger => 1.5,
+        }
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|size| size.name() == name)
+    }
+}
 const MIN_ZOOM: f32 = 0.05;
 const MAX_ZOOM: f32 = 32.0;
 const CHECKER_SIZE: f32 = 8.0;
@@ -319,13 +357,22 @@ pub struct XPaintApp {
     drawing: Option<Drawing>,
     pending_shape: Option<PendingShape>,
     show_about: bool,
+    icon_size: IconSize,
     /// Dev aid: `XPAINT_SCREENSHOT=out.png` saves the app's own frame and quits.
     screenshot_to: Option<PathBuf>,
 }
 
 impl XPaintApp {
     pub fn new(cc: &eframe::CreationContext<'_>, files: Vec<PathBuf>) -> Self {
-        Self::with_context(&cc.egui_ctx, files)
+        let mut app = Self::with_context(&cc.egui_ctx, files);
+        if let Some(size) = cc
+            .storage
+            .and_then(|s| s.get_string(ICON_SIZE_KEY))
+            .and_then(|name| IconSize::from_name(&name))
+        {
+            app.icon_size = size;
+        }
+        app
     }
 
     fn with_context(ctx: &egui::Context, files: Vec<PathBuf>) -> Self {
@@ -380,6 +427,7 @@ impl XPaintApp {
             drawing: None,
             pending_shape: None,
             show_about: false,
+            icon_size: IconSize::default(),
             screenshot_to: std::env::var_os("XPAINT_SCREENSHOT").map(PathBuf::from),
         };
         for path in files {
@@ -802,26 +850,15 @@ impl XPaintApp {
     fn toolbar(&mut self, ui: &mut Ui) {
         let rect = ui.max_rect();
 
-        // The toolbar doubles as the window's title bar: dragging its empty space moves
-        // the window and a double click maximizes it, as in GNOME apps and browsers.
-        // In a dark theme the real title bar can be hard to tell apart from it. The
-        // buttons are added later and therefore sit on top and still get their clicks;
-        // drags are handled at the end, once it is known whether one started on them.
-        let background = ui.interact(
-            rect,
-            ui.scope_id().with("title_bar"),
-            Sense::click_and_drag(),
+        // A thin accent line along the top edge separates the toolbar from the window's
+        // title bar, which in a dark theme can have the same color.
+        let width = 2.0;
+        let content = ui.ctx().content_rect();
+        ui.painter().hline(
+            content.x_range(),
+            content.top() + width / 2.0,
+            Stroke::new(width, ACCENT),
         );
-        if background.double_clicked() {
-            let maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
-            ui.ctx()
-                .send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized));
-        }
-        // A faint line along the top edge separates the toolbar from the title bar.
-        let top = ui.ctx().content_rect().top() + 0.5;
-        let line = ui.visuals().widgets.noninteractive.bg_stroke;
-        ui.painter()
-            .hline(ui.ctx().content_rect().x_range(), top, line);
 
         // Left: branding and the file actions.
         ui.scope_builder(
@@ -831,8 +868,8 @@ impl XPaintApp {
             |ui| {
                 ui.add(
                     egui::Image::from_texture(&self.logo)
-                        .fit_to_exact_size(Vec2::splat(24.0))
-                        .corner_radius(5),
+                        .fit_to_exact_size(Vec2::splat(24.0 * icon_scale(ui)))
+                        .corner_radius(5.0 * icon_scale(ui)),
                 );
                 ui.label(RichText::new("xpaint").strong().size(15.0));
                 ui.add_space(4.0);
@@ -904,31 +941,19 @@ impl XPaintApp {
                 if icon_button(ui, ABOUT_ICON, true, "About xpaint").clicked() {
                     self.show_about = true;
                 }
+                let settings = icon_button(ui, SETTINGS_ICON, true, "Settings");
+                egui::Popup::menu(&settings).show(|ui| self.settings_menu(ui));
                 ui.separator();
                 theme_buttons(ui);
             },
         );
+    }
 
-        // egui gives a drag to the topmost widget that senses drags, which is the
-        // background even when the press was on a button (buttons only sense clicks).
-        if background.drag_started_by(egui::PointerButton::Primary) {
-            let origin = ui.input(|i| i.pointer.press_origin());
-            let on_widget = origin.is_some_and(|origin| {
-                ui.ctx().viewport(|v| {
-                    v.this_pass
-                        .widgets
-                        .layers()
-                        .flat_map(|(_, widgets)| widgets.iter())
-                        .any(|w| {
-                            w.id != background.id
-                                && w.sense.senses_click()
-                                && w.rect.contains(origin)
-                        })
-                })
-            });
-            if !on_widget {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
-            }
+    fn settings_menu(&mut self, ui: &mut Ui) {
+        ui.label(RichText::new("Icon size").strong());
+        for size in IconSize::ALL {
+            let label = format!("{} ({:.0}%)", size.name(), size.scale() * 100.0);
+            ui.radio_value(&mut self.icon_size, size, label);
         }
     }
 
@@ -981,10 +1006,11 @@ impl XPaintApp {
         ui.vertical_centered(|ui| {
             for tool in Tool::ALL {
                 let selected = self.tool == tool;
-                let button = egui::Button::selectable(selected, "").min_size(TOOL_BUTTON);
+                let scale = icon_scale(ui);
+                let button = egui::Button::selectable(selected, "").min_size(TOOL_BUTTON * scale);
                 let response = ui.add(button);
                 let color = selectable_icon_color(ui, &response, selected);
-                paint_icon(ui, response.rect, tool.icon(), 20.0, color);
+                paint_icon(ui, response.rect, tool.icon(), 20.0 * scale, color);
                 if response.on_hover_text(tool.tooltip()).clicked() {
                     self.set_tool(tool);
                 }
@@ -1102,7 +1128,13 @@ impl XPaintApp {
                 } else {
                     ui.visuals().weak_text_color()
                 };
-                paint_icon(ui, close_button.rect, CLOSE_ICON, 12.0, color);
+                paint_icon(
+                    ui,
+                    close_button.rect,
+                    CLOSE_ICON,
+                    12.0 * icon_scale(ui),
+                    color,
+                );
                 if close_button.on_hover_text("Close").clicked() {
                     close = Some(i);
                 }
@@ -1546,14 +1578,16 @@ impl XPaintApp {
 impl eframe::App for XPaintApp {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        set_icon_scale(&ctx, self.icon_size.scale());
         self.handle_shortcuts(&ctx);
 
         let style = ui.style().clone();
+        let scale = self.icon_size.scale();
         let panel = Frame::side_top_panel(&style);
 
         egui::Panel::top("toolbar")
             .frame(panel.inner_margin(Margin::symmetric(12, 8)))
-            .exact_size(TOOLBAR_HEIGHT)
+            .exact_size(TOOLBAR_HEIGHT * scale)
             .show(ui, |ui| self.toolbar(ui));
         egui::Panel::top("tool_options")
             .frame(panel.inner_margin(Margin::symmetric(12, 4)))
@@ -1564,7 +1598,7 @@ impl eframe::App for XPaintApp {
             .show(ui, |ui| self.status_bar(ui));
         egui::Panel::left("tools")
             .frame(panel.inner_margin(Margin::symmetric(6, 8)))
-            .exact_size(TOOL_BUTTON.x + 12.0)
+            .exact_size(TOOL_BUTTON.x * scale + 12.0)
             .resizable(false)
             .show(ui, |ui| self.tool_panel(ui));
         if !self.documents.is_empty() {
@@ -1586,6 +1620,10 @@ impl eframe::App for XPaintApp {
 
         self.about_window(&ctx);
         self.take_screenshot_when_ready(&ctx);
+    }
+
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        storage.set_string(ICON_SIZE_KEY, self.icon_size.name().to_owned());
     }
 }
 
@@ -1619,15 +1657,31 @@ fn setup_style(ctx: &egui::Context) {
     });
 }
 
+fn icon_scale_id() -> egui::Id {
+    egui::Id::unique("xpaint_icon_scale")
+}
+
+/// Makes the icon size setting's scale available to the icon helpers below. Set at the
+/// start of every frame.
+fn set_icon_scale(ctx: &egui::Context, scale: f32) {
+    ctx.data_mut(|d| d.insert_temp(icon_scale_id(), scale));
+}
+
+/// The factor icons and their buttons are scaled by, from the icon size setting.
+fn icon_scale(ui: &Ui) -> f32 {
+    ui.data(|d| d.get_temp(icon_scale_id())).unwrap_or(1.0)
+}
+
 /// A fixed-size button showing only `icon`, with `tooltip` on hover.
 fn icon_button(ui: &mut Ui, icon: ImageSource, enabled: bool, tooltip: &str) -> egui::Response {
-    let button = egui::Button::new("").min_size(ICON_BUTTON);
+    let scale = icon_scale(ui);
+    let button = egui::Button::new("").min_size(ICON_BUTTON * scale);
     let response = ui.add_enabled(enabled, button);
     let mut color = ui.style().interact(&response).fg_stroke.color;
     if !enabled {
         color = color.gamma_multiply(ui.visuals().disabled_alpha());
     }
-    paint_icon(ui, response.rect, icon, 18.0, color);
+    paint_icon(ui, response.rect, icon, 18.0 * scale, color);
     response
         .on_hover_text(tooltip)
         .on_disabled_hover_text(tooltip)
@@ -1653,7 +1707,8 @@ fn selectable_icon_color(ui: &Ui, response: &egui::Response, selected: bool) -> 
     }
 }
 
-/// `icon` as a 16 point image in `color`, to sit next to text.
+/// `icon` as a 16 point image in `color`, to sit next to text. It stays at that size
+/// whatever the icon size setting, like the text it goes with.
 fn menu_icon(icon: ImageSource, color: Color32) -> egui::Image {
     egui::Image::new(icon)
         .tint(color)
@@ -1682,9 +1737,11 @@ fn theme_buttons(ui: &mut Ui) {
             ),
         ] {
             let selected = preference == choice;
-            let response = ui.add(egui::Button::selectable(selected, "").min_size(ICON_BUTTON));
+            let scale = icon_scale(ui);
+            let button = egui::Button::selectable(selected, "").min_size(ICON_BUTTON * scale);
+            let response = ui.add(button);
             let color = selectable_icon_color(ui, &response, selected);
-            paint_icon(ui, response.rect, icon, 16.0, color);
+            paint_icon(ui, response.rect, icon, 16.0 * scale, color);
             if response.on_hover_text(tip).clicked() {
                 preference = choice;
             }
@@ -2529,88 +2586,6 @@ mod tests {
             "Ctrl+S is not the S tool shortcut"
         );
         std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    /// The viewport commands the app sent during one frame of `ui`.
-    fn commands(output: &egui::FullOutput) -> Vec<egui::ViewportCommand> {
-        output
-            .viewport_output
-            .get(&egui::ViewportId::ROOT)
-            .map(|v| v.commands.clone())
-            .unwrap_or_default()
-    }
-
-    #[test]
-    fn toolbar_drags_and_maximizes_the_window() {
-        let ctx = egui::Context::default();
-        let mut app = XPaintApp::with_context(&ctx, Vec::new());
-        let toolbar = Rect::from_min_size(Pos2::ZERO, vec2(1000.0, TOOLBAR_HEIGHT));
-        let mut run = |events: Vec<Event>| {
-            let input = egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 600.0))),
-                events,
-                ..Default::default()
-            };
-            let mut output = ctx.run_ui(input, |ui| {
-                egui::Panel::top("toolbar")
-                    .exact_size(TOOLBAR_HEIGHT)
-                    .show(ui, |ui| app.toolbar(ui));
-            });
-            output.textures_delta.clear();
-            commands(&output)
-        };
-        let empty = pos2(700.0, toolbar.center().y);
-
-        run(vec![Event::PointerMoved(empty)]);
-        run(vec![button(empty, true, Modifiers::NONE)]);
-        let mut sent = Vec::new();
-        for dx in [4.0, 8.0, 12.0] {
-            sent.extend(run(vec![Event::PointerMoved(empty + vec2(dx, 0.0))]));
-        }
-        run(vec![button(
-            empty + vec2(12.0, 0.0),
-            false,
-            Modifiers::NONE,
-        )]);
-        assert!(sent.contains(&egui::ViewportCommand::StartDrag), "{sent:?}");
-
-        // Double click on the empty space.
-        let mut sent = Vec::new();
-        for pressed in [true, false, true, false] {
-            sent.extend(run(vec![button(empty, pressed, Modifiers::NONE)]));
-        }
-        assert!(
-            sent.contains(&egui::ViewportCommand::Maximized(true)),
-            "{sent:?}"
-        );
-
-        // Dragging from a button does not move the window. Take the leftmost button:
-        // a clickable widget narrower than the whole toolbar.
-        let on_button = ctx.viewport(|v| {
-            v.this_pass
-                .widgets
-                .layers()
-                .flat_map(|(_, widgets)| widgets.iter())
-                .filter(|w| w.sense.senses_click() && w.rect.width() < 100.0)
-                .min_by(|a, b| a.rect.left().total_cmp(&b.rect.left()))
-                .map(|w| w.rect.center())
-                .expect("the toolbar has buttons")
-        });
-        run(vec![Event::PointerMoved(on_button)]);
-        run(vec![button(on_button, true, Modifiers::NONE)]);
-        let mut sent = Vec::new();
-        for dx in [4.0, 8.0, 12.0] {
-            sent.extend(run(vec![Event::PointerMoved(on_button + vec2(dx, 0.0))]));
-        }
-        run(vec![button(
-            on_button + vec2(12.0, 0.0),
-            false,
-            Modifiers::NONE,
-        )]);
-        assert!(
-            !sent.contains(&egui::ViewportCommand::StartDrag),
-            "{sent:?}"
-        );
     }
 
     #[test]
