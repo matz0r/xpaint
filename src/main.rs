@@ -1,12 +1,35 @@
 mod app;
 mod clipboard;
 mod document;
+mod install;
 mod shapes;
 mod text;
 
 use std::path::PathBuf;
 
 fn main() -> eframe::Result {
+    // `--install` / `--uninstall` do the same as the Settings menu, without the UI.
+    let first = std::env::args().nth(1);
+    if let Some(action @ ("--install" | "--uninstall")) = first.as_deref() {
+        let result = install::Location::user().and_then(|location| {
+            if action == "--install" {
+                let exe = std::env::current_exe()
+                    .map_err(|e| format!("Could not find the running program: {e}"))?;
+                location.install(&exe)?;
+                println!("Installed xpaint to {}", location.binary.display());
+            } else {
+                location.uninstall()?;
+                println!("Uninstalled xpaint");
+            }
+            Ok(())
+        });
+        if let Err(e) = result {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+
     // Image files given on the command line are opened as tabs.
     let files: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).collect();
 

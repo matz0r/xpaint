@@ -12,8 +12,8 @@ xpaint is a small paint.net-style image editor for Linux written in Rust with eg
 - Single test: `cargo test <name>`, e.g. `cargo test undo_and_redo_crop`
 - Perf benchmark (ignored by default): `cargo test --release -- --ignored --nocapture brush_frame_time`
 - Lint: `cargo clippy`, format: `cargo fmt`
-- Install for the current user (binary, icons, desktop entry into `~/.local`): `./install.sh`; remove with `./install.sh uninstall`
-- Release: bump `version` in `Cargo.toml`, commit, then `git tag vX.Y.Z && git push origin main vX.Y.Z`. `.github/workflows/release.yml` builds on the `v*` tag and publishes a GitHub release with `xpaint-vX.Y.Z-x86_64-linux.tar.gz` (binary, `install.sh`, assets). `install.sh` uses the bundled binary when there is no `Cargo.toml` next to it.
+- Install for the current user (binary, icons, desktop entry into `~/.local`): `./install.sh` (builds, then runs `xpaint --install`, same as Settings → Install for this user); remove with `./install.sh uninstall`
+- Release: bump `version` in `Cargo.toml`, commit, then `git tag vX.Y.Z && git push origin main vX.Y.Z`. `.github/workflows/release.yml` builds on the `v*` tag and publishes a GitHub release with `xpaint-vX.Y.Z-x86_64-linux.tar.gz` (self-contained binary, README, licenses).
 - Screenshot the running app (dev aid): `XPAINT_SCREENSHOT=out.png cargo run -- some.png` saves the app's own frame after ~1 s and exits
 - Regenerate the icon (needs Pillow): `python3 assets/make_icon.py`
 
@@ -24,6 +24,7 @@ xpaint is a small paint.net-style image editor for Linux written in Rust with eg
 - `src/shapes.rs` — shape geometry. A `Shape` is decomposed into `Primitive`s; the canvas paints those with egui as the live preview and `rasterize` (tiny-skia) draws the same primitives into pixels on commit, so preview and result match. Also hit-testing/bounds for moving shapes.
 - `src/text.rs` — text layout and rasterization with ab_glyph using the embedded DejaVu fonts (`assets/fonts`).
 - `src/clipboard.rs` — reads an image from the system clipboard via arboard (Wayland supported).
+- `src/install.rs` — per-user install/uninstall (binary to `~/.local/bin`, embedded icons and desktop entry); used by the Settings menu and the `--install` / `--uninstall` flags.
 
 Key interaction model: finished shapes (`PendingShape`) and text (`PendingText`) **float** above the image rather than being written immediately — they can still be moved (drag / arrow-key nudge), restyled, or deleted. They are composited into the document (`Document::draw_overlay`, one undoable step) when committed, e.g. on switching tools, Enter, or starting something new.
 

@@ -1,5 +1,6 @@
 # Builds xpaint for Linux when a version tag (e.g. v0.2.0) is pushed and publishes it
-# as a GitHub release, with the files install.sh needs.
+# as a GitHub release. The binary is self-contained; it installs itself from its
+# Settings menu.
 name: Release
 
 on:
@@ -24,9 +25,7 @@ jobs:
         run: |
           name="xpaint-${GITHUB_REF_NAME}-x86_64-linux"
           mkdir -p "$name/assets/fonts"
-          cp target/release/xpaint install.sh README.md LICENSE "$name/"
-          cp assets/icon-256.png assets/icon-512.png assets/icon.svg assets/xpaint.desktop \
-            "$name/assets/"
+          cp target/release/xpaint README.md LICENSE "$name/"
           cp assets/fonts/DejaVu-LICENSE.txt "$name/assets/fonts/"
           tar -czf "$name.tar.gz" "$name"
           echo "ARCHIVE=$name.tar.gz" >> "$GITHUB_ENV"

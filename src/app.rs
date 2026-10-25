@@ -10,6 +10,7 @@ use egui::{
 
 use crate::clipboard;
 use crate::document::Document;
+use crate::install;
 use crate::shapes::{self, Primitive, ShapeStyle};
 use crate::text::{self, RenderedText, TextStyle};
 #[cfg(test)]
@@ -962,6 +963,65 @@ impl XPaintApp {
         for size in IconSize::ALL {
             let label = format!("{} ({:.0}%)", size.name(), size.scale() * 100.0);
             ui.radio_value(&mut self.icon_size, size, label);
+        }
+
+        ui.separator();
+        ui.label(RichText::new("Desktop integration").strong());
+        let location = match install::Location::user() {
+            Ok(location) => location,
+            Err(e) => {
+                ui.label(RichText::new(e).weak());
+                return;
+            }
+        };
+        let tip = format!(
+            "Copies xpaint to {} and adds it to the application menu \
+             and to \"Open with…\" for images. Only for your user, no root needed.",
+            location.binary.display()
+        );
+        if location.is_installed() {
+            // Running another build, e.g. a newly downloaded one: offer to replace
+            // the installed binary with it.
+            if !location.is_running_installed()
+                && ui
+                    .button("Update installation")
+                    .on_hover_text(&tip)
+                    .clicked()
+            {
+                self.install(&location);
+                ui.close();
+            }
+            if ui
+                .button("Uninstall")
+                .on_hover_text("Removes xpaint from the application menu and from your user")
+                .clicked()
+            {
+                match location.uninstall() {
+                    Ok(()) => self.info("Uninstalled xpaint".to_owned()),
+                    Err(e) => self.error(e),
+                }
+                ui.close();
+            }
+        } else if ui
+            .button("Install for this user")
+            .on_hover_text(&tip)
+            .clicked()
+        {
+            self.install(&location);
+            ui.close();
+        }
+    }
+
+    fn install(&mut self, location: &install::Location) {
+        let result = std::env::current_exe()
+            .map_err(|e| format!("Could not find the running program: {e}"))
+            .and_then(|exe| location.install(&exe));
+        match result {
+            Ok(()) => self.info(format!(
+                "Installed xpaint to {}; it is now in your application menu",
+                location.binary.display()
+            )),
+            Err(e) => self.error(e),
         }
     }
 

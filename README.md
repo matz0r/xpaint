@@ -17,30 +17,37 @@ crop it, add arrows, boxes and text, and save it again.
 - **Opens** PNG, JPEG, BMP, GIF, TGA, TIFF, WebP, ICO and QOI
 - **Saves** PNG, JPEG, WebP, BMP, GIF, TIFF, TGA and QOI. Transparent areas turn white when saving as JPEG.
 - **Adjustable icon size** (Normal, Large, Larger) in the Settings menu, remembered between runs
+- **Installs itself** into your application menu from the Settings menu
 - Works on Wayland and X11
 
 ## Installation
 
-Download the latest `xpaint-…-x86_64-linux.tar.gz` from the
-[releases page](https://github.com/matz0r/xpaint/releases), unpack it, and run
-`install.sh` inside:
+xpaint is a single program file with nothing else to install.
 
-```sh
-tar -xzf xpaint-*-x86_64-linux.tar.gz
-cd xpaint-*-x86_64-linux
-./install.sh
-```
+1. Download the latest `xpaint-…-x86_64-linux.tar.gz` from the
+   [releases page](https://github.com/matz0r/xpaint/releases) and unpack it.
+2. Run `xpaint` from the unpacked folder: double-click it, or run `./xpaint` in a terminal.
 
-xpaint is installed for your user only, no root needed. It then shows up in your
-application menu and in "Open with…" for image files.
+That's it. It runs on 64-bit Linux distributions from about 2024 on.
 
-It runs on 64-bit Linux distributions from about 2024 on.
+### Adding xpaint to your application menu
 
-To remove it again, run `./install.sh uninstall` from the same folder.
+To start xpaint like any other app, open **Settings** (the sliders icon at the top
+right) and choose **Install for this user**. This:
+
+- copies xpaint to `~/.local/bin/xpaint`, so `xpaint` also works in a terminal
+- adds it to your application menu, with its icon
+- offers it in "Open with…" for image files
+
+It's only for your user and needs no root password. Afterwards you can delete the
+downloaded folder.
+
+To update, start the newly downloaded xpaint and choose **Settings → Update
+installation**. To remove xpaint again, choose **Settings → Uninstall**.
 
 ## Usage
 
-Start xpaint from your application menu, or from a terminal, optionally with images to open:
+Start xpaint from your application menu (once installed), or from a terminal, optionally with images to open:
 
 ```sh
 xpaint screenshot.png photo.jpg
