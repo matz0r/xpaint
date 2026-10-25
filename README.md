@@ -3,7 +3,7 @@
 A simple, fast image editor for Linux in a single binary. Open a screenshot,
 crop it, add arrows, boxes and text, and save it again.
 
-![xpaint icon](assets/icon-256.png)
+![xpaint with an annotated screenshot open](assets/screenshot.png)
 
 ## Features
 
