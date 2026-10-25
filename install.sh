@@ -1,5 +1,6 @@
 #!/bin/sh
-# Builds xpaint and installs it for the current user, with its icon and desktop entry.
+# Installs xpaint for the current user, with its icon and desktop entry. In a source
+# checkout it builds xpaint first; in a release archive it uses the included binary.
 #
 # Usage: ./install.sh            install into ~/.local
 #        ./install.sh uninstall  remove it again
@@ -15,8 +16,13 @@ if [ "${1:-}" = "uninstall" ]; then
         "$ICONS/256x256/apps/xpaint.png" "$ICONS/512x512/apps/xpaint.png" \
         "$ICONS/scalable/apps/xpaint.svg"
 else
-    cargo build --release
-    install -Dm755 target/release/xpaint "$BIN/xpaint"
+    if [ -f Cargo.toml ]; then
+        cargo build --release
+        binary=target/release/xpaint
+    else
+        binary=xpaint
+    fi
+    install -Dm755 "$binary" "$BIN/xpaint"
     install -Dm644 assets/icon-256.png "$ICONS/256x256/apps/xpaint.png"
     install -Dm644 assets/icon-512.png "$ICONS/512x512/apps/xpaint.png"
     install -Dm644 assets/icon.svg "$ICONS/scalable/apps/xpaint.svg"

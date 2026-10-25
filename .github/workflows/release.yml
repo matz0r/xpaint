@@ -1,0 +1,39 @@
+# Builds xpaint for Linux when a version tag (e.g. v0.2.0) is pushed and publishes it
+# as a GitHub release, with the files install.sh needs.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # to create the release
+
+jobs:
+  linux:
+    # The binary needs at least the glibc of the runner it was built on (2.39 here).
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Package
+        run: |
+          name="xpaint-${GITHUB_REF_NAME}-x86_64-linux"
+          mkdir -p "$name/assets/fonts"
+          cp target/release/xpaint install.sh README.md LICENSE "$name/"
+          cp assets/icon-256.png assets/icon-512.png assets/icon.svg assets/xpaint.desktop \
+            "$name/assets/"
+          cp assets/fonts/DejaVu-LICENSE.txt "$name/assets/fonts/"
+          tar -czf "$name.tar.gz" "$name"
+          echo "ARCHIVE=$name.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" "$ARCHIVE"
+          --title "xpaint $GITHUB_REF_NAME" --generate-notes

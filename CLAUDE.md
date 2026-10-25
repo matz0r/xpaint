@@ -13,6 +13,7 @@ xpaint is a small paint.net-style image editor for Linux written in Rust with eg
 - Perf benchmark (ignored by default): `cargo test --release -- --ignored --nocapture brush_frame_time`
 - Lint: `cargo clippy`, format: `cargo fmt`
 - Install for the current user (binary, icons, desktop entry into `~/.local`): `./install.sh`; remove with `./install.sh uninstall`
+- Release: bump `version` in `Cargo.toml`, commit, then `git tag vX.Y.Z && git push origin main vX.Y.Z`. `.github/workflows/release.yml` builds on the `v*` tag and publishes a GitHub release with `xpaint-vX.Y.Z-x86_64-linux.tar.gz` (binary, `install.sh`, assets). `install.sh` uses the bundled binary when there is no `Cargo.toml` next to it.
 - Screenshot the running app (dev aid): `XPAINT_SCREENSHOT=out.png cargo run -- some.png` saves the app's own frame after ~1 s and exits
 - Regenerate the icon (needs Pillow): `python3 assets/make_icon.py`
 

@@ -20,7 +20,22 @@ crop it, add arrows, boxes and text, and save it again.
 
 ## Installation
 
-xpaint is installed from source. You need a Rust toolchain ([rustup.rs](https://rustup.rs)).
+### Download
+
+Download the latest `xpaint-…-x86_64-linux.tar.gz` from the
+[releases page](https://github.com/matz0r/xpaint/releases), then:
+
+```sh
+tar -xzf xpaint-*-x86_64-linux.tar.gz
+cd xpaint-*-x86_64-linux
+./install.sh
+```
+
+The prebuilt binary runs on 64-bit Linux distributions from about 2024 on (glibc 2.39 or newer).
+
+### From source
+
+You need a Rust toolchain ([rustup.rs](https://rustup.rs)).
 
 ```sh
 git clone https://github.com/matz0r/xpaint.git
@@ -28,7 +43,7 @@ cd xpaint
 ./install.sh
 ```
 
-This builds xpaint and installs it for your user only (no root needed):
+Either way, xpaint is installed for your user only (no root needed):
 
 - the program at `~/.local/bin/xpaint`
 - an application-menu entry and icon, so xpaint shows up in your launcher and in "Open with…" for image files
