@@ -35,6 +35,9 @@ const THEME_SYSTEM_ICON: ImageSource = egui::include_image!("../assets/icons/the
 const THEME_DARK_ICON: ImageSource = egui::include_image!("../assets/icons/theme-dark.svg");
 const THEME_LIGHT_ICON: ImageSource = egui::include_image!("../assets/icons/theme-light.svg");
 const SETTINGS_ICON: ImageSource = egui::include_image!("../assets/icons/settings.svg");
+const INSTALL_ICON: ImageSource = egui::include_image!("../assets/icons/install.svg");
+const UPDATE_ICON: ImageSource = egui::include_image!("../assets/icons/update.svg");
+const UNINSTALL_ICON: ImageSource = egui::include_image!("../assets/icons/uninstall.svg");
 
 const OPEN_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
 const SAVE_SHORTCUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
@@ -361,6 +364,7 @@ pub struct XPaintApp {
     drawing: Option<Drawing>,
     pending_shape: Option<PendingShape>,
     show_about: bool,
+    show_install_success: bool,
     icon_size: IconSize,
     /// Dev aid: `XPAINT_SCREENSHOT=out.png` saves the app's own frame and quits.
     screenshot_to: Option<PathBuf>,
@@ -431,6 +435,7 @@ impl XPaintApp {
             drawing: None,
             pending_shape: None,
             show_about: false,
+            show_install_success: false,
             icon_size: IconSize::default(),
             screenshot_to: std::env::var_os("XPAINT_SCREENSHOT").map(PathBuf::from),
         };
@@ -959,14 +964,15 @@ impl XPaintApp {
     }
 
     fn settings_menu(&mut self, ui: &mut Ui) {
-        ui.label(RichText::new("Icon size").strong());
+        ui.label(RichText::new("Icon size").weak());
         for size in IconSize::ALL {
             let label = format!("{} ({:.0}%)", size.name(), size.scale() * 100.0);
             ui.radio_value(&mut self.icon_size, size, label);
         }
 
         ui.separator();
-        ui.label(RichText::new("Desktop integration").strong());
+        ui.label(RichText::new("Desktop integration").weak());
+        let color = ui.visuals().text_color();
         let location = match install::Location::user() {
             Ok(location) => location,
             Err(e) => {
@@ -984,7 +990,10 @@ impl XPaintApp {
             // the installed binary with it.
             if !location.is_running_installed()
                 && ui
-                    .button("Update installation")
+                    .add(egui::Button::image_and_text(
+                        menu_icon(UPDATE_ICON, color),
+                        "Update installation",
+                    ))
                     .on_hover_text(&tip)
                     .clicked()
             {
@@ -992,7 +1001,10 @@ impl XPaintApp {
                 ui.close();
             }
             if ui
-                .button("Uninstall")
+                .add(egui::Button::image_and_text(
+                    menu_icon(UNINSTALL_ICON, color),
+                    "Uninstall",
+                ))
                 .on_hover_text("Removes xpaint from the application menu and from your user")
                 .clicked()
             {
@@ -1003,7 +1015,10 @@ impl XPaintApp {
                 ui.close();
             }
         } else if ui
-            .button("Install for this user")
+            .add(egui::Button::image_and_text(
+                menu_icon(INSTALL_ICON, color),
+                "Install for this user",
+            ))
             .on_hover_text(&tip)
             .clicked()
         {
@@ -1017,10 +1032,10 @@ impl XPaintApp {
             .map_err(|e| format!("Could not find the running program: {e}"))
             .and_then(|exe| location.install(&exe));
         match result {
-            Ok(()) => self.info(format!(
-                "Installed xpaint to {}; it is now in your application menu",
-                location.binary.display()
-            )),
+            Ok(()) => {
+                self.info("Installation successful".to_owned());
+                self.show_install_success = true;
+            }
             Err(e) => self.error(e),
         }
     }
@@ -1698,6 +1713,20 @@ impl eframe::App for XPaintApp {
             .show(ui, |ui| self.canvas(ui));
 
         self.about_window(&ctx);
+        if self.show_install_success {
+            let modal = egui::Modal::new(egui::Id::unique("install_success")).show(&ctx, |ui| {
+                ui.set_max_width(360.0);
+                ui.heading("Installation successful");
+                ui.label(
+                    "You can now close xpaint and reopen it from the start menu (application menu).",
+                );
+                ui.add_space(8.0);
+                ui.button("OK").clicked()
+            });
+            if modal.inner || modal.should_close() {
+                self.show_install_success = false;
+            }
+        }
         self.take_screenshot_when_ready(&ctx);
     }
 
