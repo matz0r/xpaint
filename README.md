@@ -8,7 +8,7 @@ crop it, add arrows, boxes and text, and save it again.
 </p>
 
 ## Download
-Prebuilt binaries for Linux and Windows are attached to each [release]([release](https://github.com/matz0r/xpaint/releases).
+Prebuilt binaries for Linux and Windows are attached to each [release](https://github.com/matz0r/xpaint/releases).
 
 ### Optional install
 <p align="center">
