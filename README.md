@@ -3,9 +3,19 @@
 A simple, fast image editor for Linux in a single binary. Open a screenshot,
 crop it, add arrows, boxes and text, and save it again.
 
-<img src="assets/screenshot.png" alt="xpaint with an annotated screenshot open" width="320">
+<p align="center">
+    <img src="assets/screenshot.png" alt="xpaint with an annotated screenshot open" width="320">
+</p>
 
-## Installation
+## Download
+Prebuilt binaries for Linux and Windows are attached to each [release]([release](https://github.com/matz0r/xpaint/releases).).
+
+### Optional install
+<p align="center">
+    <img src="assets/install.png" alt="how to install xpaint" width="175">
+</p>
+
+## Manual Installation
 
 xpaint is a single program file with nothing else to install.
 
