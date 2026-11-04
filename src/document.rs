@@ -39,7 +39,15 @@ pub struct Document {
     pub selection: Option<PixelRect>,
     undo_stack: Vec<Snapshot>,
     redo_stack: Vec<Snapshot>,
-    texture: Option<TextureHandle>,
+    texture: Option<Vec<Tile>>,
+}
+
+/// One GPU texture covering part of the image. Images larger than the GPU's
+/// maximum texture size are uploaded as a grid of tiles.
+pub struct Tile {
+    /// The part of the image this tile shows, in image pixels.
+    pub rect: PixelRect,
+    pub texture: TextureHandle,
 }
 
 impl Document {
@@ -211,14 +219,41 @@ impl Document {
         }
     }
 
-    /// Returns the GPU texture for this image, uploading it on first use.
-    pub fn texture(&mut self, ctx: &egui::Context) -> &TextureHandle {
+    /// Returns the GPU textures for this image, uploading them on first use.
+    ///
+    /// Each tile is at most the GPU's maximum texture side in either dimension,
+    /// so arbitrarily large images can be shown.
+    pub fn texture(&mut self, ctx: &egui::Context) -> &[Tile] {
         self.texture.get_or_insert_with(|| {
-            let size = [self.image.width() as usize, self.image.height() as usize];
-            let color_image = ColorImage::from_rgba_unmultiplied(size, self.image.as_raw());
-            ctx.load_texture(&self.name, color_image, TextureOptions::NEAREST)
+            let max_side = ctx.input(|i| i.max_texture_side).max(1) as u32;
+            upload_tiles(ctx, &self.name, &self.image, max_side)
         })
     }
+}
+
+fn upload_tiles(ctx: &egui::Context, name: &str, image: &RgbaImage, max_side: u32) -> Vec<Tile> {
+    let (width, height) = image.dimensions();
+    let mut tiles = Vec::new();
+    for y in (0..height).step_by(max_side as usize) {
+        for x in (0..width).step_by(max_side as usize) {
+            let rect = PixelRect {
+                x,
+                y,
+                width: max_side.min(width - x),
+                height: max_side.min(height - y),
+            };
+            let pixels = image::imageops::crop_imm(image, x, y, rect.width, rect.height).to_image();
+            let size = [rect.width as usize, rect.height as usize];
+            let color_image = ColorImage::from_rgba_unmultiplied(size, pixels.as_raw());
+            let texture = ctx.load_texture(
+                format!("{name} [{x},{y}]"),
+                color_image,
+                TextureOptions::NEAREST,
+            );
+            tiles.push(Tile { rect, texture });
+        }
+    }
+    tiles
 }
 
 fn file_name(path: &Path) -> String {
@@ -420,5 +455,24 @@ mod tests {
         trim_history(&mut stack, 1);
         assert_eq!(stack.len(), 1);
         assert_eq!(stack[0].image.width(), 30);
+    }
+
+    #[test]
+    fn large_images_are_split_into_tiles() {
+        let ctx = egui::Context::default();
+        let image = doc(250, 90).image;
+        let tiles = upload_tiles(&ctx, "big", &image, 100);
+        let rects: Vec<_> = tiles
+            .iter()
+            .map(|t| (t.rect.x, t.rect.y, t.rect.width, t.rect.height))
+            .collect();
+        assert_eq!(
+            rects,
+            [(0, 0, 100, 90), (100, 0, 100, 90), (200, 0, 50, 90)]
+        );
+        for tile in &tiles {
+            let [w, h] = tile.texture.size();
+            assert_eq!((w as u32, h as u32), (tile.rect.width, tile.rect.height));
+        }
     }
 }

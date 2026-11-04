@@ -2,6 +2,7 @@ mod app;
 mod clipboard;
 mod document;
 mod install;
+mod leoview;
 mod shapes;
 mod text;
 

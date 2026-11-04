@@ -9,14 +9,17 @@ use egui::{
 };
 
 use crate::clipboard;
-use crate::document::Document;
+use crate::document::{Document, PixelRect};
 use crate::install;
+use crate::leoview;
 use crate::shapes::{self, Primitive, ShapeStyle};
 use crate::text::{self, RenderedText, TextStyle};
 #[cfg(test)]
 use image::RgbaImage;
 
 pub const ICON_PNG: &[u8] = include_bytes!("../assets/icon-256.png");
+/// Logo of LeoView, shown on the "Open in LeoView" button.
+const LEOVIEW_ICON_PNG: &[u8] = include_bytes!("../assets/leoview-icon.png");
 
 // UI icons: white line drawings, tinted to the widget's text color when painted.
 const OPEN_ICON: ImageSource = egui::include_image!("../assets/icons/open.svg");
@@ -345,6 +348,7 @@ struct Status {
 
 pub struct XPaintApp {
     logo: TextureHandle,
+    leoview_logo: TextureHandle,
     /// A 2×2 checker, repeated across the image to show transparency.
     checkerboard: TextureHandle,
     documents: Vec<Document>,
@@ -387,21 +391,8 @@ impl XPaintApp {
         setup_style(ctx);
         egui_extras::install_image_loaders(ctx);
 
-        let logo = image::load_from_memory(ICON_PNG)
-            .expect("embedded icon is a valid PNG")
-            .to_rgba8();
-        let logo = ColorImage::from_rgba_unmultiplied(
-            [logo.width() as usize, logo.height() as usize],
-            logo.as_raw(),
-        );
-        let logo = ctx.load_texture(
-            "logo",
-            logo,
-            TextureOptions {
-                mipmap_mode: Some(egui::TextureFilter::Linear),
-                ..TextureOptions::LINEAR
-            },
-        );
+        let logo = load_logo(ctx, "logo", ICON_PNG);
+        let leoview_logo = load_logo(ctx, "leoview-logo", LEOVIEW_ICON_PNG);
 
         let checker = ColorImage::from_rgba_unmultiplied(
             [2, 2],
@@ -420,6 +411,7 @@ impl XPaintApp {
 
         let mut app = Self {
             logo,
+            leoview_logo,
             checkerboard,
             documents: Vec::new(),
             active: 0,
@@ -946,7 +938,7 @@ impl XPaintApp {
             },
         );
 
-        // Right: theme, About.
+        // Right: theme, Open in LeoView, Settings, About.
         ui.scope_builder(
             UiBuilder::new()
                 .max_rect(rect)
@@ -958,6 +950,10 @@ impl XPaintApp {
                 let settings = icon_button(ui, SETTINGS_ICON, true, "Settings");
                 egui::Popup::menu(&settings).show(|ui| self.settings_menu(ui));
                 ui.separator();
+                if let Some(binary) = leoview::installed() {
+                    self.leoview_button(ui, &binary);
+                    ui.separator();
+                }
                 theme_buttons(ui);
             },
         );
@@ -1037,6 +1033,26 @@ impl XPaintApp {
                 self.show_install_success = true;
             }
             Err(e) => self.error(e),
+        }
+    }
+
+    /// Opens the active image's file in LeoView. Only for images that have a file:
+    /// LeoView shows it as last saved, without edits made since.
+    fn leoview_button(&mut self, ui: &mut Ui, binary: &std::path::Path) {
+        let path = self.documents.get(self.active).and_then(|d| d.path.clone());
+        let tip = match &path {
+            Some(_) => "Open in LeoView\nShows the file as last saved",
+            None if self.documents.is_empty() => "Open in LeoView",
+            None => "Open in LeoView\nSave the image first",
+        };
+        let logo = self.leoview_logo.clone();
+        if logo_button(ui, &logo, path.is_some(), tip).clicked()
+            && let Some(path) = path
+        {
+            match leoview::open(binary, &path) {
+                Ok(()) => self.info(format!("Opened {} in LeoView", path.display())),
+                Err(e) => self.error(e),
+            }
         }
     }
 
@@ -1373,7 +1389,11 @@ impl XPaintApp {
         }
 
         let image_size = Vec2::new(doc.width() as f32, doc.height() as f32) * doc.zoom;
-        let texture_id = doc.texture(ui.ctx()).id();
+        let tiles: Vec<(PixelRect, TextureId)> = doc
+            .texture(ui.ctx())
+            .iter()
+            .map(|t| (t.rect, t.texture.id()))
+            .collect();
         let shadow = ui.visuals().window_shadow;
         let drag_anchor = &mut self.drag_anchor;
         let tool = self.tool;
@@ -1597,12 +1617,16 @@ impl XPaintApp {
                 let painter = ui.painter();
                 painter.add(shadow.as_shape(rect, CornerRadius::ZERO));
                 paint_checkerboard(painter, rect, checkerboard);
-                painter.image(
-                    texture_id,
-                    rect,
-                    Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
-                    Color32::WHITE,
-                );
+                for (tile, texture_id) in &tiles {
+                    let min = rect.min + vec2(tile.x as f32, tile.y as f32) * doc.zoom;
+                    let size = vec2(tile.width as f32, tile.height as f32) * doc.zoom;
+                    painter.image(
+                        *texture_id,
+                        Rect::from_min_size(min, size),
+                        Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                        Color32::WHITE,
+                    );
+                }
                 if let Some(sel) = doc.selection {
                     let min = rect.min + vec2(sel.x as f32, sel.y as f32) * doc.zoom;
                     let size = vec2(sel.width as f32, sel.height as f32) * doc.zoom;
@@ -1793,6 +1817,46 @@ fn icon_button(ui: &mut Ui, icon: ImageSource, enabled: bool, tooltip: &str) -> 
     response
         .on_hover_text(tooltip)
         .on_disabled_hover_text(tooltip)
+}
+
+/// Like [`icon_button`], but showing a full-color logo (faded when disabled).
+fn logo_button(ui: &mut Ui, logo: &TextureHandle, enabled: bool, tooltip: &str) -> egui::Response {
+    let scale = icon_scale(ui);
+    let button = egui::Button::new("").min_size(ICON_BUTTON * scale);
+    let response = ui.add_enabled(enabled, button);
+    let alpha = if enabled {
+        1.0
+    } else {
+        ui.visuals().disabled_alpha()
+    };
+    let size = Vec2::splat(20.0 * scale);
+    egui::Image::from_texture(logo)
+        .fit_to_exact_size(size)
+        .corner_radius(4.0 * scale)
+        .tint(Color32::WHITE.gamma_multiply(alpha))
+        .paint_at(ui, Rect::from_center_size(response.rect.center(), size));
+    response
+        .on_hover_text(tooltip)
+        .on_disabled_hover_text(tooltip)
+}
+
+/// A texture of an embedded PNG, smoothly scaled down for small sizes.
+fn load_logo(ctx: &egui::Context, name: &str, png: &[u8]) -> TextureHandle {
+    let logo = image::load_from_memory(png)
+        .expect("embedded icon is a valid PNG")
+        .to_rgba8();
+    let logo = ColorImage::from_rgba_unmultiplied(
+        [logo.width() as usize, logo.height() as usize],
+        logo.as_raw(),
+    );
+    ctx.load_texture(
+        name,
+        logo,
+        TextureOptions {
+            mipmap_mode: Some(egui::TextureFilter::Linear),
+            ..TextureOptions::LINEAR
+        },
+    )
 }
 
 /// Draws `icon` at `size` points, centered in `rect`, in `color`.

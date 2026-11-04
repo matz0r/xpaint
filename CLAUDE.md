@@ -20,10 +20,11 @@ xpaint is a small paint.net-style image editor for Linux written in Rust with eg
 ## Architecture
 
 - `src/app.rs` — `XPaintApp`, the whole UI and interaction state (toolbar, tabs, canvas, status bar, shortcuts). Most of the code lives here.
-- `src/document.rs` — `Document`: one open image (`RgbaImage`), its path, zoom, selection, undo/redo, and cached egui texture. Every edit goes through `record(label)` which snapshots the full image; history is trimmed to a ~1 GiB budget (always keeping the latest step). After changing `image`, set `texture = None` so it is re-uploaded.
+- `src/document.rs` — `Document`: one open image (`RgbaImage`), its path, zoom, selection, undo/redo, and cached egui texture. Every edit goes through `record(label)` which snapshots the full image; history is trimmed to a ~1 GiB budget (always keeping the latest step). After changing `image`, set `texture = None` so it is re-uploaded. The texture is a grid of tiles no larger than the GPU's `max_texture_side` (often 8192), since egui panics on bigger textures.
 - `src/shapes.rs` — shape geometry. A `Shape` is decomposed into `Primitive`s; the canvas paints those with egui as the live preview and `rasterize` (tiny-skia) draws the same primitives into pixels on commit, so preview and result match. Also hit-testing/bounds for moving shapes.
 - `src/text.rs` — text layout and rasterization with ab_glyph using the embedded DejaVu fonts (`assets/fonts`).
 - `src/clipboard.rs` — reads an image from the system clipboard via arboard (Wayland supported).
+- `src/leoview.rs` — finds the companion viewer LeoView at `~/.local/bin/leoview`; when present the toolbar shows a button that opens the active image's file in it.
 - `src/install.rs` — per-user install/uninstall (binary to `~/.local/bin`, embedded icons and desktop entry); used by the Settings menu and the `--install` / `--uninstall` flags.
 
 Key interaction model: finished shapes (`PendingShape`) and text (`PendingText`) **float** above the image rather than being written immediately — they can still be moved (drag / arrow-key nudge), restyled, or deleted. They are composited into the document (`Document::draw_overlay`, one undoable step) when committed, e.g. on switching tools, Enter, or starting something new.
