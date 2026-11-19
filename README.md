@@ -37,8 +37,22 @@ right) and choose **Install for this user**. This:
 It's only for your user and needs no root password. Afterwards you can delete the
 downloaded folder.
 
-To update, start the newly downloaded xpaint and choose **Settings → Update
-installation**. To remove xpaint again, choose **Settings → Uninstall**.
+To remove xpaint again, choose **Settings → Uninstall**.
+
+### Updates
+
+The installed copy has **Check for updates once a day** in the **Settings** menu,
+off by default. Turn it on and it checks GitHub for a newer release right away;
+after that it checks when xpaint starts, at most once every 24 hours. If there is
+a newer version, **Update to x.y.z** appears in the toolbar: it downloads that
+release and installs it, then offers to restart (open images are reopened from
+their files). Nothing is downloaded or installed without that click, and with the
+setting off no update check is made. `xpaint --update` updates from the command
+line in any case.
+
+You can also update by hand: start a newly downloaded xpaint and choose
+**Settings → Update installation**. Versions up to 0.3.0 don't have the update
+setting yet: install the new download once that way.
 
 ## Features
 

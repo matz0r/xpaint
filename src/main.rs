@@ -5,12 +5,30 @@ mod install;
 mod leoview;
 mod shapes;
 mod text;
+mod update;
 
 use std::path::PathBuf;
 
 fn main() -> eframe::Result {
-    // `--install` / `--uninstall` do the same as the Settings menu, without the UI.
     let first = std::env::args().nth(1);
+    // Asked by the updater, to check a download before installing it.
+    if first.as_deref() == Some("--version") {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+    // Same as the Update button, from the command line.
+    if first.as_deref() == Some("--update") {
+        match update::update_now() {
+            Ok(Some(version)) => println!("Updated xpaint to {version}"),
+            Ok(None) => println!("xpaint {} is up to date", env!("CARGO_PKG_VERSION")),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        return Ok(());
+    }
+    // `--install` / `--uninstall` do the same as the Settings menu, without the UI.
     if let Some(action @ ("--install" | "--uninstall")) = first.as_deref() {
         let result = install::Location::user().and_then(|location| {
             if action == "--install" {

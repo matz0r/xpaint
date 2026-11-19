@@ -1,6 +1,6 @@
 [package]
 name = "xpaint"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "MIT"
 
@@ -13,6 +13,14 @@ egui_extras = { version = "0.37", features = ["svg"] }
 image = "0.25.10"
 rfd = "0.17.2"
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
+semver = "1"
+
+# Update check and download from GitHub releases (installed copy only).
+# rustls with bundled roots: no OpenSSL needed at runtime.
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+# Unpacks the .tar.gz release for the update
+flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
+tar = { version = "0.4.46", default-features = false }
 
 # Decode images fast even in debug builds
 [profile.dev.package."*"]

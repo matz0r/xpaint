@@ -14,6 +14,7 @@ use crate::install;
 use crate::leoview;
 use crate::shapes::{self, Primitive, ShapeStyle};
 use crate::text::{self, RenderedText, TextStyle};
+use crate::update;
 #[cfg(test)]
 use image::RgbaImage;
 
@@ -369,6 +370,14 @@ pub struct XPaintApp {
     pending_shape: Option<PendingShape>,
     show_about: bool,
     show_install_success: bool,
+    /// Running from the installed copy: the only one that offers updates.
+    update_eligible: bool,
+    update: update::Settings,
+    /// An update is being downloaded and installed.
+    updating: bool,
+    update_rx: Option<std::sync::mpsc::Receiver<update::Msg>>,
+    /// The version just installed by the Update button, to offer a restart.
+    updated_to: Option<semver::Version>,
     icon_size: IconSize,
     /// Dev aid: `XPAINT_SCREENSHOT=out.png` saves the app's own frame and quits.
     screenshot_to: Option<PathBuf>,
@@ -383,6 +392,15 @@ impl XPaintApp {
             .and_then(|name| IconSize::from_name(&name))
         {
             app.icon_size = size;
+        }
+        // A downloaded copy neither reads nor changes the update settings.
+        app.update_eligible = update::eligible();
+        if app.update_eligible {
+            app.update = update::Settings::load();
+            // Checked at start, at most once per day.
+            if app.update.check && update::due(app.update.last_check, update::now()) {
+                app.update_rx = Some(update::check(&cc.egui_ctx));
+            }
         }
         app
     }
@@ -428,6 +446,11 @@ impl XPaintApp {
             pending_shape: None,
             show_about: false,
             show_install_success: false,
+            update_eligible: false,
+            update: update::Settings::default(),
+            updating: false,
+            update_rx: None,
+            updated_to: None,
             icon_size: IconSize::default(),
             screenshot_to: std::env::var_os("XPAINT_SCREENSHOT").map(PathBuf::from),
         };
@@ -950,6 +973,7 @@ impl XPaintApp {
                 let settings = icon_button(ui, SETTINGS_ICON, true, "Settings");
                 egui::Popup::menu(&settings).show(|ui| self.settings_menu(ui));
                 ui.separator();
+                self.update_button(ui);
                 if let Some(binary) = leoview::installed() {
                     self.leoview_button(ui, &binary);
                     ui.separator();
@@ -964,6 +988,14 @@ impl XPaintApp {
         for size in IconSize::ALL {
             let label = format!("{} ({:.0}%)", size.name(), size.scale() * 100.0);
             ui.radio_value(&mut self.icon_size, size, label);
+        }
+
+        ui.separator();
+        ui.label(RichText::new("Updates").weak());
+        if self.update_eligible {
+            self.update_settings(ui);
+        } else {
+            ui.label(RichText::new("Only the installed copy checks for updates.").weak());
         }
 
         ui.separator();
@@ -1033,6 +1065,125 @@ impl XPaintApp {
                 self.show_install_success = true;
             }
             Err(e) => self.error(e),
+        }
+    }
+
+    /// "Update to x.y.z" when the daily check found a newer release.
+    fn update_button(&mut self, ui: &mut Ui) {
+        if self.updating {
+            ui.spinner();
+            ui.label(RichText::new("Updating…").weak());
+            ui.separator();
+        } else if let Some(version) = self.update.offered().cloned() {
+            let color = ui.visuals().text_color();
+            let button = egui::Button::image_and_text(
+                menu_icon(UPDATE_ICON, color),
+                format!("Update to {version}"),
+            )
+            .selected(true);
+            if ui
+                .add(button)
+                .on_hover_text("Download it from GitHub and install it")
+                .clicked()
+            {
+                self.updating = true;
+                self.update_rx = Some(update::install(ui.ctx(), version));
+            }
+            ui.separator();
+        }
+    }
+
+    /// "Check for updates" switch and its status (installed copy only).
+    fn update_settings(&mut self, ui: &mut Ui) {
+        let changed = ui
+            .checkbox(&mut self.update.check, "Check for updates once a day")
+            .on_hover_text(
+                "Looks for a new version on GitHub when xpaint starts. \
+                 Nothing is installed without your click.",
+            )
+            .changed();
+        if changed {
+            self.update.save();
+            // Turning it on checks right away; off cancels a running check.
+            self.update_rx = (self.update.check && !self.updating).then(|| update::check(ui.ctx()));
+        }
+        if !self.update.check || self.updating {
+            return;
+        }
+        if self.update_rx.is_some() {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(RichText::new("Checking…").weak());
+            });
+        } else if let Some(version) = self.update.offered() {
+            ui.label(format!("Version {version} is available."));
+        } else if self.update.last_check > 0 {
+            ui.label(RichText::new("xpaint is up to date.").weak());
+        }
+    }
+
+    /// Handles the result of an update check or installation.
+    fn poll_update(&mut self) {
+        let Some(msg) = self.update_rx.as_ref().and_then(|rx| rx.try_recv().ok()) else {
+            return;
+        };
+        self.update_rx = None;
+        match msg {
+            update::Msg::Checked(latest) => {
+                self.update.last_check = update::now();
+                self.update.latest = latest;
+                self.update.save();
+            }
+            update::Msg::Installed(version) => {
+                self.updating = false;
+                self.info(format!("Installed xpaint {version}"));
+                self.updated_to = Some(version);
+            }
+            update::Msg::Failed(e) => {
+                self.updating = false;
+                self.error(format!("Update failed: {e}"));
+            }
+        }
+    }
+
+    /// After an update: restart into the new version now, or keep working.
+    fn restart_modal(&mut self, ctx: &egui::Context) {
+        let Some(version) = self.updated_to.clone() else {
+            return;
+        };
+        let files: Vec<PathBuf> = self
+            .documents
+            .iter()
+            .filter_map(|d| d.path.clone())
+            .collect();
+        let has_images = !self.documents.is_empty();
+        let modal = egui::Modal::new(egui::Id::unique("update_restart")).show(ctx, |ui| {
+            ui.set_max_width(380.0);
+            ui.heading(format!("xpaint {version} is installed"));
+            ui.label("It is used from the next start of xpaint.");
+            if has_images {
+                ui.label(
+                    "Restarting now reopens the open images from their files: \
+                     unsaved changes are lost.",
+                );
+            }
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let restart = ui.button("Restart now").clicked();
+                let later = ui.button("Later").clicked();
+                (restart, later)
+            })
+            .inner
+        });
+        let (restart, later) = modal.inner;
+        if restart {
+            match update::restart(&files) {
+                Ok(()) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+                Err(e) => self.error(e),
+            }
+            self.updated_to = None;
+        } else if later || modal.should_close() {
+            self.updated_to = None;
         }
     }
 
@@ -1698,6 +1849,7 @@ impl eframe::App for XPaintApp {
         let ctx = ui.ctx().clone();
         set_icon_scale(&ctx, self.icon_size.scale());
         self.handle_shortcuts(&ctx);
+        self.poll_update();
 
         let style = ui.style().clone();
         let scale = self.icon_size.scale();
@@ -1737,6 +1889,7 @@ impl eframe::App for XPaintApp {
             .show(ui, |ui| self.canvas(ui));
 
         self.about_window(&ctx);
+        self.restart_modal(&ctx);
         if self.show_install_success {
             let modal = egui::Modal::new(egui::Id::unique("install_success")).show(&ctx, |ui| {
                 ui.set_max_width(360.0);
