@@ -1,6 +1,6 @@
 [package]
 name = "xpaint"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 license = "MIT"
 
@@ -18,9 +18,18 @@ semver = "1"
 # Update check and download from GitHub releases (installed copy only).
 # rustls with bundled roots: no OpenSSL needed at runtime.
 ureq = { version = "3", default-features = false, features = ["rustls"] }
-# Unpacks the .tar.gz release for the update
+# Unpacks the release archive for the update: .tar.gz on Linux, .zip on Windows
 flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 tar = { version = "0.4.46", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
+# AttachConsole, so the command-line modes print to the terminal they were started from
+windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
+
+[build-dependencies]
+# Embeds the icon in xpaint.exe (only when building for Windows)
+winresource = { version = "0.1", default-features = false }
 
 # Decode images fast even in debug builds
 [profile.dev.package."*"]

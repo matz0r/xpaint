@@ -1,3 +1,7 @@
+// A GUI program on Windows: no console window. The command-line modes attach to
+// the console they were started from (see `attach_console`).
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod app;
 mod clipboard;
 mod document;
@@ -11,6 +15,9 @@ use std::path::PathBuf;
 
 fn main() -> eframe::Result {
     let first = std::env::args().nth(1);
+    if first.as_deref().is_some_and(|a| a.starts_with("--")) {
+        attach_console();
+    }
     // Asked by the updater, to check a download before installing it.
     if first.as_deref() == Some("--version") {
         println!("{}", env!("CARGO_PKG_VERSION"));
@@ -79,6 +86,26 @@ fn main() -> eframe::Result {
         Box::new(|cc| Ok(Box::new(app::XPaintApp::new(cc, files)))),
     )
 }
+
+/// Lets `--version`, `--install` etc. print to the terminal they were run from.
+/// Without a console (started from Explorer) or with redirected output (run by
+/// the updater) nothing changes.
+#[cfg(windows)]
+fn attach_console() {
+    use windows_sys::Win32::System::Console::{
+        ATTACH_PARENT_PROCESS, AttachConsole, GetStdHandle, STD_OUTPUT_HANDLE,
+    };
+    // SAFETY: plain Win32 calls without pointers.
+    unsafe {
+        let handle = GetStdHandle(STD_OUTPUT_HANDLE);
+        if handle.is_null() {
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn attach_console() {}
 
 fn window_icon() -> egui::IconData {
     let icon = image::load_from_memory(app::ICON_PNG)

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Generates the xpaint icon, a rainbow-filled X, as SVG and PNG from one set of shapes.
+"""Generates the xpaint icon, a rainbow-filled X, as SVG, PNG and ICO (for the
+Windows executable) from one set of shapes.
 
 Usage: python3 assets/make_icon.py   (needs Pillow; writes into assets/)
 """
@@ -112,4 +113,7 @@ if __name__ == "__main__":
     write_svg()
     for size in (256, 512):
         render_png(size).save(OUT / f"icon-{size}.png")
+    # Each ICO size rendered on its own, so small sizes stay sharp.
+    ico = [render_png(size) for size in (256, 64, 48, 32, 24, 16)]
+    ico[0].save(OUT / "icon.ico", append_images=ico[1:])
     print("wrote", OUT)
