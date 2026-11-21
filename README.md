@@ -1,6 +1,6 @@
 # xpaint
 
-A simple, fast image editor for Linux in a single binary. Open a screenshot,
+A simple, fast image editor for Linux and Windows in a single binary. Open a screenshot,
 crop it, add arrows, boxes and text, and save it again.
 
 <p align="center">
@@ -19,11 +19,15 @@ Prebuilt binaries for Linux and Windows are attached to each [release](https://g
 
 xpaint is a single program file with nothing else to install.
 
-1. Download the latest `xpaint-…-x86_64-linux.tar.gz` from the
+1. Download the latest `xpaint-…-x86_64-linux.tar.gz` (Linux) or
+   `xpaint-…-x86_64-windows.zip` (Windows) from the
    [releases page](https://github.com/matz0r/xpaint/releases) and unpack it.
-2. Run `xpaint` from the unpacked folder: double-click it, or run `./xpaint` in a terminal.
+2. Run `xpaint` (`xpaint.exe` on Windows) from the unpacked folder: double-click it,
+   or run `./xpaint` in a terminal.
 
-That's it. It runs on 64-bit Linux distributions from about 2024 on.
+That's it. It runs on 64-bit Linux distributions from about 2024 on and on 64-bit
+Windows 10 and 11. The Windows build isn't signed, so SmartScreen may warn on
+the first start: choose **More info → Run anyway**.
 
 ### Adding xpaint to your application menu
 
@@ -34,8 +38,11 @@ right) and choose **Install for this user**. This:
 - adds it to your application menu, with its icon
 - offers it in "Open with…" for image files
 
-It's only for your user and needs no root password. Afterwards you can delete the
-downloaded folder.
+On Windows it copies xpaint to `%LOCALAPPDATA%\Programs\xpaint`, adds it to the
+Start menu and offers it in "Open with" for images.
+
+It's only for your user and needs no root password or admin rights. Afterwards you
+can delete the downloaded folder.
 
 To remove xpaint again, choose **Settings → Uninstall**.
 
@@ -67,7 +74,7 @@ setting yet: install the new download once that way.
 - **Saves** PNG, JPEG, WebP, BMP, GIF, TIFF, TGA and QOI. Transparent areas turn white when saving as JPEG.
 - **Adjustable icon size** (Normal, Large, Larger) in the Settings menu, remembered between runs
 - **Installs itself** into your application menu from the Settings menu
-- Works on Wayland and X11
+- Works on Wayland and X11, and on Windows
 
 ## Usage
 

@@ -13,7 +13,17 @@ use std::time::Duration;
 
 const REPO: &str = "https://github.com/matz0r/xpaint";
 const TEMP_PREFIX: &str = "xpaint-update-";
-const BINARY: &str = "xpaint";
+const BINARY: &str = if cfg!(windows) {
+    "xpaint.exe"
+} else {
+    "xpaint"
+};
+/// Must match the archive names in `.github/workflows/release.yml`.
+const ASSET_SUFFIX: &str = if cfg!(windows) {
+    "x86_64-windows.zip"
+} else {
+    "x86_64-linux.tar.gz"
+};
 /// Release archives are a few MB; this only guards against a broken response.
 const MAX_DOWNLOAD: u64 = 64 * 1024 * 1024;
 /// Minimum time between two automatic checks
@@ -27,7 +37,8 @@ pub enum Msg {
     Failed(String),
 }
 
-/// Saved update state, in `$XDG_CONFIG_HOME/xpaint/update`. Only the installed
+/// Saved update state, in `$XDG_CONFIG_HOME/xpaint/update` (Windows:
+/// `%APPDATA%\xpaint\update`). Only the installed
 /// copy reads and writes it.
 #[derive(Default, PartialEq, Debug)]
 pub struct Settings {
@@ -40,6 +51,13 @@ pub struct Settings {
 }
 
 impl Settings {
+    #[cfg(windows)]
+    fn path() -> Option<PathBuf> {
+        let config = std::env::var_os("APPDATA").map(PathBuf::from)?;
+        Some(config.join("xpaint").join("update"))
+    }
+
+    #[cfg(not(windows))]
     fn path() -> Option<PathBuf> {
         let config = std::env::var_os("XDG_CONFIG_HOME")
             .map(PathBuf::from)
@@ -210,9 +228,8 @@ pub fn is_newer(version: &semver::Version) -> bool {
     *version > semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap()
 }
 
-/// Must match the archive name in `.github/workflows/release.yml`.
 fn asset_url(version: &semver::Version) -> String {
-    format!("{REPO}/releases/download/v{version}/xpaint-v{version}-x86_64-linux.tar.gz")
+    format!("{REPO}/releases/download/v{version}/xpaint-v{version}-{ASSET_SUFFIX}")
 }
 
 fn download(version: &semver::Version) -> Result<Vec<u8>, String> {
@@ -248,7 +265,7 @@ fn unpack_and_install(archive: &[u8], dir: &Path, version: &semver::Version) -> 
 
     // Make sure the download is the announced version before it replaces
     // anything.
-    let output = Command::new(&exe)
+    let output = hidden(&exe)
         .arg("--version")
         .stdin(Stdio::null())
         .output()
@@ -261,7 +278,7 @@ fn unpack_and_install(archive: &[u8], dir: &Path, version: &semver::Version) -> 
         ));
     }
 
-    let output = Command::new(&exe)
+    let output = hidden(&exe)
         .arg("--install")
         .stdin(Stdio::null())
         .output()
@@ -277,6 +294,45 @@ fn unpack_and_install(archive: &[u8], dir: &Path, version: &semver::Version) -> 
         .to_owned())
 }
 
+/// A command that opens no console window when started from the GUI.
+fn hidden(program: &Path) -> Command {
+    #[allow(unused_mut)]
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
+#[cfg(windows)]
+fn unpack(archive: &[u8], exe: &Path) -> Result<(), String> {
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(archive))
+        .map_err(|e| format!("Broken archive: {e}"))?;
+    for i in 0..zip.len() {
+        let mut entry = zip
+            .by_index(i)
+            .map_err(|e| format!("Broken archive: {e}"))?;
+        let name = entry
+            .name()
+            .map_err(|e| format!("Broken archive: {e}"))?
+            .replace('\\', "/");
+        if entry.is_file() && name.rsplit('/').next() == Some(BINARY) {
+            let mut out = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(exe)
+                .map_err(|e| e.to_string())?;
+            std::io::copy(&mut entry, &mut out).map_err(|e| format!("Broken archive: {e}"))?;
+            return Ok(());
+        }
+    }
+    Err(format!("{BINARY} is missing from the download"))
+}
+
+#[cfg(not(windows))]
 fn unpack(archive: &[u8], exe: &Path) -> Result<(), String> {
     use std::os::unix::fs::OpenOptionsExt;
     let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(archive));
@@ -336,10 +392,12 @@ mod tests {
     #[test]
     fn names_release_asset() {
         let url = asset_url(&semver::Version::new(1, 2, 3));
-        assert_eq!(
-            url,
+        let expected = if cfg!(windows) {
+            "https://github.com/matz0r/xpaint/releases/download/v1.2.3/xpaint-v1.2.3-x86_64-windows.zip"
+        } else {
             "https://github.com/matz0r/xpaint/releases/download/v1.2.3/xpaint-v1.2.3-x86_64-linux.tar.gz"
-        );
+        };
+        assert_eq!(url, expected);
     }
 
     #[test]

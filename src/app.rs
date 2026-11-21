@@ -20,6 +20,12 @@ use image::RgbaImage;
 
 pub const ICON_PNG: &[u8] = include_bytes!("../assets/icon-256.png");
 /// Logo of LeoView, shown on the "Open in LeoView" button.
+/// Where the installed copy shows up
+const APP_MENU: &str = if cfg!(windows) {
+    "Start menu"
+} else {
+    "application menu"
+};
 const LEOVIEW_ICON_PNG: &[u8] = include_bytes!("../assets/leoview-icon.png");
 
 // UI icons: white line drawings, tinted to the widget's text color when painted.
@@ -1009,8 +1015,8 @@ impl XPaintApp {
             }
         };
         let tip = format!(
-            "Copies xpaint to {} and adds it to the application menu \
-             and to \"Open with…\" for images. Only for your user, no root needed.",
+            "Copies xpaint to {} and adds it to the {APP_MENU} \
+             and to \"Open with…\" for images. Only for your user, no admin rights needed.",
             location.binary.display()
         );
         if location.is_installed() {
@@ -1033,7 +1039,7 @@ impl XPaintApp {
                     menu_icon(UNINSTALL_ICON, color),
                     "Uninstall",
                 ))
-                .on_hover_text("Removes xpaint from the application menu and from your user")
+                .on_hover_text(format!("Removes xpaint from the {APP_MENU} and from your user"))
                 .clicked()
             {
                 match location.uninstall() {
@@ -1895,7 +1901,7 @@ impl eframe::App for XPaintApp {
                 ui.set_max_width(360.0);
                 ui.heading("Installation successful");
                 ui.label(
-                    "You can now close xpaint and reopen it from the start menu (application menu).",
+                    format!("You can now close xpaint and reopen it from the {APP_MENU}."),
                 );
                 ui.add_space(8.0);
                 ui.button("OK").clicked()

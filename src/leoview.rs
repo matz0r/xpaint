@@ -6,6 +6,10 @@ use std::process::Command;
 
 /// The installed LeoView binary, if there is one.
 pub fn installed() -> Option<PathBuf> {
+    // LeoView is Linux only.
+    if !cfg!(unix) {
+        return None;
+    }
     let home = std::env::var_os("HOME")?;
     binary_in(Path::new(&home))
 }
