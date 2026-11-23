@@ -1039,7 +1039,9 @@ impl XPaintApp {
                     menu_icon(UNINSTALL_ICON, color),
                     "Uninstall",
                 ))
-                .on_hover_text(format!("Removes xpaint from the {APP_MENU} and from your user"))
+                .on_hover_text(format!(
+                    "Removes xpaint from the {APP_MENU} and from your user"
+                ))
                 .clicked()
             {
                 match location.uninstall() {
@@ -1293,6 +1295,17 @@ impl XPaintApp {
                     .on_hover_text("Line width in image pixels");
                     ui.color_edit_button_srgba_unmultiplied(&mut style.color)
                         .on_hover_text("Color");
+                    if matches!(self.tool, Tool::Rectangle | Tool::Ellipse) {
+                        let mut filled = style.fill.is_some();
+                        if ui.checkbox(&mut filled, "Filled").changed() {
+                            style.fill = filled.then_some(style.color);
+                        }
+                        if let Some(fill) = &mut style.fill {
+                            ui.label("Fill");
+                            ui.color_edit_button_srgba_unmultiplied(fill)
+                                .on_hover_text("Fill color");
+                        }
+                    }
                     ui.separator();
                     match (self.tool, self.pending_shape.is_some()) {
                         (_, true) => {
@@ -1900,9 +1913,9 @@ impl eframe::App for XPaintApp {
             let modal = egui::Modal::new(egui::Id::unique("install_success")).show(&ctx, |ui| {
                 ui.set_max_width(360.0);
                 ui.heading("Installation successful");
-                ui.label(
-                    format!("You can now close xpaint and reopen it from the {APP_MENU}."),
-                );
+                ui.label(format!(
+                    "You can now close xpaint and reopen it from the {APP_MENU}."
+                ));
                 ui.add_space(8.0);
                 ui.button("OK").clicked()
             });
@@ -2130,6 +2143,13 @@ fn paint_shape_preview(
                 let points: Vec<Pos2> = points.iter().map(to_screen).collect();
                 let stroke = Stroke::new(width, color);
                 if *closed {
+                    if let Some([r, g, b, a]) = style.fill {
+                        painter.add(Shape::convex_polygon(
+                            points.clone(),
+                            Color32::from_rgba_unmultiplied(r, g, b, a),
+                            Stroke::NONE,
+                        ));
+                    }
                     painter.add(Shape::closed_line(points, stroke));
                 } else {
                     // Round ends and round joints where the line turns sharply, like the
@@ -2531,6 +2551,7 @@ mod tests {
         app.tool = tool;
         app.shape_style = ShapeStyle {
             color: [255, 0, 0, 255],
+            fill: None,
             width: 4.0,
         };
         (app, ctx)
@@ -2745,6 +2766,7 @@ mod tests {
         // Color and width changes apply to the floating shape.
         app.shape_style = ShapeStyle {
             color: [0, 0, 255, 255],
+            fill: None,
             width: 2.0,
         };
         frame(&mut app, &ctx, vec![key(Key::Escape, true)]);

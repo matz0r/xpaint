@@ -66,7 +66,7 @@ setting yet: install the new download once that way.
 - **Tabs** for working on several images at once
 - **Paste from clipboard** straight into a new image, which suits screenshots
 - **Select and crop**
-- **Drawing tools:** brush, arrow, rectangle, ellipse and text, with adjustable color, line width, font size and bold
+- **Drawing tools:** brush, arrow, rectangle, ellipse and text, with adjustable color, line width, font size and bold; rectangles and ellipses support an optional fill with its own color
 - **Shapes and text stay editable** until you move on. Move them with the mouse or arrow keys, change their color or size, or delete them.
 - **Undo / redo** for every edit
 - **Zoom** with Ctrl + mouse wheel, the zoom slider, fit to window, or back to 100%

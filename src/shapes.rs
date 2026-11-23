@@ -15,6 +15,8 @@ pub type Point = (f32, f32);
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ShapeStyle {
     pub color: [u8; 4],
+    /// Optional interior color for rectangles and ellipses.
+    pub fill: Option<[u8; 4]>,
     /// Line width in image pixels.
     pub width: f32,
 }
@@ -23,6 +25,7 @@ impl Default for ShapeStyle {
     fn default() -> Self {
         Self {
             color: [220, 40, 40, 255],
+            fill: None,
             width: 4.0,
         }
     }
@@ -33,9 +36,9 @@ pub enum Shape {
     Brush(Vec<Point>),
     /// A line from the first point with an arrowhead at the second.
     Arrow(Point, Point),
-    /// A rectangle outline spanned by two corners.
+    /// A rectangle spanned by two corners.
     Rectangle(Point, Point),
-    /// An ellipse outline inscribed in the rectangle spanned by two corners.
+    /// An ellipse inscribed in the rectangle spanned by two corners.
     Ellipse(Point, Point),
 }
 
@@ -267,6 +270,11 @@ pub fn rasterize(
     }
 
     let mut pixmap = Pixmap::new((right - left) as u32, (bottom - top) as u32)?;
+    let mut fill_mask = if style.fill.is_some() {
+        Some(Pixmap::new(pixmap.width(), pixmap.height())?)
+    } else {
+        None
+    };
     let transform = Transform::from_translate(-left as f32, -top as f32);
     // Draw opaque and apply the color's alpha afterwards, so that overlapping parts
     // (an arrow's line under its head, a brush stroke crossing itself) do not get
@@ -287,6 +295,9 @@ pub fn rasterize(
                     path.close();
                 }
                 let Some(path) = path.finish() else { continue };
+                if *closed && let Some(mask) = &mut fill_mask {
+                    mask.fill_path(&path, &paint, FillRule::Winding, transform, None);
+                }
                 let stroke = Stroke {
                     width: style.width,
                     line_cap: LineCap::Round,
@@ -324,6 +335,15 @@ pub fn rasterize(
         let alpha = (coverage.alpha() as u32 * a as u32 + 127) / 255;
         *pixel = Rgba([r, g, b, alpha as u8]);
     }
+    if let (Some(mask), Some([r, g, b, a])) = (fill_mask, style.fill) {
+        let mut filled = RgbaImage::new(mask.width(), mask.height());
+        for (pixel, coverage) in filled.pixels_mut().zip(mask.pixels()) {
+            let alpha = (coverage.alpha() as u32 * a as u32 + 127) / 255;
+            *pixel = Rgba([r, g, b, alpha as u8]);
+        }
+        image::imageops::overlay(&mut filled, &image, 0, 0);
+        image = filled;
+    }
     Some((image, (left, top)))
 }
 
@@ -333,6 +353,7 @@ mod tests {
 
     const RED: ShapeStyle = ShapeStyle {
         color: [255, 0, 0, 255],
+        fill: None,
         width: 4.0,
     };
 
@@ -396,9 +417,49 @@ mod tests {
     }
 
     #[test]
+    fn filled_shapes_keep_separate_outline_and_fill_colors() {
+        let style = ShapeStyle {
+            fill: Some([0, 0, 255, 128]),
+            ..RED
+        };
+        for shape in [
+            Shape::Rectangle((80.0, 70.0), (20.0, 30.0)),
+            Shape::Ellipse((80.0, 70.0), (20.0, 30.0)),
+        ] {
+            let image = draw(shape, &style);
+            assert_eq!(image.get_pixel(50, 50).0, [0, 0, 255, 128]);
+            assert_eq!(image.get_pixel(20, 50).0, RED.color);
+            assert_eq!(alpha(&image, 10, 50), 0);
+        }
+    }
+
+    #[test]
+    fn fill_setting_does_not_change_brushes_or_arrows() {
+        let style = ShapeStyle {
+            fill: Some([0, 255, 0, 255]),
+            ..RED
+        };
+        for shape in [
+            Shape::Brush(vec![(10.0, 10.0), (80.0, 80.0)]),
+            Shape::Arrow((10.0, 50.0), (90.0, 50.0)),
+        ] {
+            let primitives = shape.primitives(style.width);
+            let (filled, _) = rasterize(&primitives, &style, (100, 100)).unwrap();
+            let (outline, _) = rasterize(&primitives, &RED, (100, 100)).unwrap();
+            for (a, b) in filled.pixels().zip(outline.pixels()) {
+                assert_eq!(a[3], b[3]);
+                if a[3] > 0 {
+                    assert_eq!(a, b);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn translucent_color_does_not_double_up_where_parts_overlap() {
         let style = ShapeStyle {
             color: [0, 0, 255, 128],
+            fill: None,
             width: 6.0,
         };
         let image = draw(Shape::Arrow((10.0, 50.0), (90.0, 50.0)), &style);
