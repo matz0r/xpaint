@@ -1083,7 +1083,8 @@ impl XPaintApp {
             ui.label(RichText::new("Updating…").weak());
             ui.separator();
         } else if let Some(version) = self.update.offered().cloned() {
-            let color = ui.visuals().text_color();
+            // Match the selected button's text against its accent background.
+            let color = ui.visuals().selection.stroke.color;
             let button = egui::Button::image_and_text(
                 menu_icon(UPDATE_ICON, color),
                 format!("Update to {version}"),
